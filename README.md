@@ -2,6 +2,12 @@
 
 LecturaBot is a professional proof of concept for a bilingual Discord reading-session assistant. It manages isolated voice/text channel queues, reader turns, a small English-Spanish text catalog, user-supplied texts, pronunciation corrections, AFK skip votes, and reading-time statistics.
 
+## Documentation
+
+- [User guide / Guía de usuario](docs/user-guide.md) — instructions for people participating in reading sessions
+- [Expected operation](EXPECTED_OPERATION.md) — behavioral requirements and evidence
+- [Expected embed metadata](EXPECTED_EMBED_METADATA.md) — message and component templates for developers
+
 The implementation follows the observed behavior in [EXPECTED_OPERATION.md](EXPECTED_OPERATION.md) and the exact captured embed/component contract in [EXPECTED_EMBED_METADATA.md](EXPECTED_EMBED_METADATA.md).
 
 ## What is implemented
