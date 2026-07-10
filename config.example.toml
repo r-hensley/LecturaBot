@@ -1,0 +1,55 @@
+# Copy this file to config.toml and replace every example Discord ID.
+# The bot token must not be stored here. Set it with LECTURABOT_TOKEN.
+
+[bot]
+guild_id = 100000000000000001
+bug_contact_user_id = 100000000000000002
+text_contact_user_id = 100000000000000003
+# Optional: sync slash commands immediately to one development guild.
+# dev_guild_id = 100000000000000001
+
+[database]
+# Relative paths are resolved from this configuration file's directory.
+path = "data/lecturabot.sqlite3"
+
+[[channel_pairs]]
+name = "lectura-1"
+voice_channel_id = 100000000000000011
+text_channel_id = 100000000000000012
+mode = "standard"
+
+[[channel_pairs]]
+name = "lectura-2"
+voice_channel_id = 100000000000000021
+text_channel_id = 100000000000000022
+mode = "standard"
+
+[[channel_pairs]]
+name = "lectura-3"
+voice_channel_id = 100000000000000031
+text_channel_id = 100000000000000032
+mode = "standard"
+
+[[channel_pairs]]
+name = "lectura-4"
+voice_channel_id = 100000000000000041
+text_channel_id = 100000000000000042
+mode = "standard"
+
+[[channel_pairs]]
+name = "lectura-5"
+voice_channel_id = 100000000000000051
+text_channel_id = 100000000000000052
+mode = "standard"
+
+[[channel_pairs]]
+name = "lectura-6"
+voice_channel_id = 100000000000000061
+text_channel_id = 100000000000000062
+mode = "standard"
+
+[[channel_pairs]]
+name = "other-languages"
+voice_channel_id = 100000000000000071
+text_channel_id = 100000000000000072
+mode = "custom_only"

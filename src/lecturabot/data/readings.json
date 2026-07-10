@@ -1,0 +1,64 @@
+[
+  {
+    "language": "es",
+    "level": "beginner",
+    "body": "Lucía abre la ventana cada mañana. Mira el cielo, riega una planta y prepara té. Después, toma su mochila y camina a la escuela."
+  },
+  {
+    "language": "es",
+    "level": "beginner",
+    "body": "En la plaza hay un perro pequeño. Lleva una pelota roja y espera junto a una banca. Mateo lanza la pelota, y el perro corre feliz."
+  },
+  {
+    "language": "es",
+    "level": "intermediate",
+    "body": "El sábado, Inés decidió reparar la bicicleta que llevaba meses en el balcón. Al principio no encontraba la causa del ruido, pero descubrió una moneda atrapada cerca de la rueda. Después de limpiarla y ajustar los frenos, pudo recorrer el barrio sin problemas.",
+    "expected_emotion": "Alivio"
+  },
+  {
+    "language": "es",
+    "level": "intermediate",
+    "body": "Cuando cerró la biblioteca, Tomás notó que había olvidado su paraguas. La lluvia ya cubría la calle, así que llamó a su hermana y esperó bajo el toldo de una cafetería. Mientras tanto, conversó con el dueño sobre los libros que ambos disfrutaban."
+  },
+  {
+    "language": "es",
+    "level": "advanced",
+    "body": "Cuando el ayuntamiento anunció que convertiría el viejo mercado en un estacionamiento, varios vecinos propusieron una alternativa. Argumentaron que restaurar el edificio conservaría la memoria del barrio y ofrecería espacio para talleres, conciertos y pequeños negocios. Tras semanas de debate, el proyecto comunitario obtuvo suficiente apoyo para seguir adelante."
+  },
+  {
+    "language": "es",
+    "level": "advanced",
+    "body": "Aunque el reloj de la estación llevaba décadas adelantándose unos minutos, nadie había considerado urgente repararlo. Los viajeros habituales ajustaban sus rutinas a aquella imprecisión, como si fuera una costumbre compartida. El día en que finalmente marcó la hora exacta, más de uno llegó tarde al tren."
+  },
+  {
+    "language": "en",
+    "level": "beginner",
+    "body": "Maya has a blue bicycle. She rides it to the park after lunch. At the pond, she stops to watch three ducks swim."
+  },
+  {
+    "language": "en",
+    "level": "beginner",
+    "body": "Ben visits the bakery at noon. He buys warm bread and a small apple pie. Then he walks home to eat with his family."
+  },
+  {
+    "language": "en",
+    "level": "intermediate",
+    "body": "Nora planned to spend Friday evening at home, but a neighbor invited her to an outdoor movie. She packed a blanket and some fruit, then followed the sound of music to the town square. By sunset, nearly every seat was filled."
+  },
+  {
+    "language": "en",
+    "level": "intermediate",
+    "body": "The first tomato in Amir's garden disappeared before it was ripe. He suspected a hungry bird, so he placed a small camera beside the plants. The next morning, the recording revealed a squirrel carrying the tomato away with surprising care.",
+    "expected_emotion": "Amusement"
+  },
+  {
+    "language": "en",
+    "level": "advanced",
+    "body": "Because the footbridge had been closed for repairs, commuters began sharing a longer path along the river. What first seemed like an inconvenience gradually became a daily gathering: strangers exchanged weather reports, gardeners traded advice, and musicians tested unfinished songs. When the bridge reopened, many people continued taking the slower route."
+  },
+  {
+    "language": "en",
+    "level": "advanced",
+    "body": "The museum's newest exhibit contained no famous paintings or ancient artifacts. Instead, it displayed ordinary objects whose owners had recorded the memories attached to them. A chipped cup, a faded ticket, and a carefully folded map invited visitors to consider how value can emerge from experience rather than rarity."
+  }
+]

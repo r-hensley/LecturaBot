@@ -1,10 +1,12 @@
 # LecturaBot Expected Operation and Required Features
 
-**Status:** Discovery draft 0.3
+**Status:** Discovery draft 0.4
 **Last updated:** 2026-07-10
 **Project basis:** Authorized behavioral reimplementation of a closed-source bot, with the original bot owner's permission.
 
 This is a living specification assembled from user explanations, copied channel output, screenshots, and later clarifications. It describes expected behavior, not a chosen technical design. When the evidence is incomplete, the uncertainty is recorded rather than silently converted into a requirement.
+
+The exact Discord embed, message-content, and button contract is documented separately in [Expected Embed Metadata and `discord.py` Templates](EXPECTED_EMBED_METADATA.md).
 
 ## Evidence labels
 
@@ -44,7 +46,7 @@ The supplied instructions ask people to correct only readers who are reading in 
 1. A user joins one of the six standard reading voice channels, or the separate **Other Languages** voice channel.
 2. The user opens that voice channel's corresponding text channel. The voice and text channel numbers must match.
 3. The user types `/queue` in English or `/cola` in Spanish to interact with the bot.
-4. The user enters the queue through **Enter Queue** / **Unirse** and remains in the associated voice channel.
+4. The user enters the queue through **Unirse / Enter** and remains in the associated voice channel.
 5. At least two people must be present before a reading session can start. The guide recommends mentioning the self-assignable `@Sesión de Lectura` role to find another participant.
 6. When the minimum is met and participants are ready, they use **Start Reading** / **Comenzar Lectura**.
 7. A queued user waits for their turn and may submit corrections for the current reader.
@@ -106,7 +108,7 @@ Observed behavior includes:
 
 - Whether the rotation is strictly FIFO, round-robin, or has exceptions.
 - Where a newly joined or rejoined user is inserted.
-- Whether the bot technically rejects `/queue`, `/cola`, or **Enter Queue** when the user is not in the matching voice channel; the documented user flow requires joining voice first.
+- Whether the bot technically rejects `/queue`, `/cola`, or **Unirse / Enter** when the user is not in the matching voice channel; the documented user flow requires joining voice first.
 - What happens when the current reader voluntarily leaves the queue or voice channel.
 - Whether the status is one edited message or a new status message on every transition.
 - Whether `/queue` creates a new session, retrieves a persistent channel-specific session, or only posts the controls for existing state.
@@ -164,7 +166,7 @@ Reader - Lectura - Español - Nivel Principiante
 
 Observed content behavior includes:
 
-- **Beginner / Principiante** and **Intermediate / Intermedio** difficulty levels.
+- Three catalog difficulty buttons per language: **Beginner / Principiante**, **Intermediate / Intermedio**, and **Advanced / Avanzado**.
 - A language-localized heading for the selected reading.
 - Some texts include optional performance metadata such as `Expected Emotion: Anger` or `Expected Emotion: Realization`.
 - Other texts omit expected-emotion metadata.
@@ -190,9 +192,8 @@ For now, this document is treated as a supplemental reading resource and possibl
 
 ### Text behavior still to confirm
 
-- The complete list of supported difficulty levels.
 - Whether language and difficulty are selected together or in separate steps.
-- The exact buttons, menus, modals, and timeout behavior.
+- Modal contents, interaction responses, validation, and timeout behavior after a selection button is pressed.
 - The exact relationship between **Start Reading** and the current-reader text picker.
 - How a custom text is entered, validated, displayed, and moderated.
 - Whether “read from any other source” means the text must be pasted through **Your Own Text**, or whether the reader may read off-platform without creating a bot reading post.
@@ -214,7 +215,7 @@ For now, this document is treated as a supplemental reading resource and possibl
 - A participant can reply to the reading message so their corrections are shown or highlighted on the selected text.
 - The reader is expected to review all corrections before passing the turn.
 
-The supplied Spanish guide labels the correction control **Poner Correciones**. This spelling is preserved as observed and should be checked against the live button before it is treated as the required final copy.
+The supplied Spanish guide misspells the control as **Poner Correciones**. The exported live button reads **Poner Correcciones / Submit Corrections**; the live button is the expected implementation copy.
 
 ### Observed correction summary
 
@@ -435,3 +436,11 @@ The most useful future examples would show:
 ### Batch 4: Read-only inspection of the linked text document
 
 - Confirmed that it is an external English-Spanish reading library with Easy, Medium, Hard, Super Hard, and SFW Halloween sections. Several bot examples occur in it, but deeper corpus auditing is deferred because the current goal is documenting bot operation.
+
+### Batch 5: Bot embed and component export
+
+- Confirmed active and empty queue embeds, the text-selection prompt, and the active-reading correction embed.
+- Established exact button labels, styles, row order, and `custom_id` routing values.
+- Confirmed Beginner, Intermediate, and Advanced catalog choices for both Spanish and English, plus language-specific custom-text actions.
+- Confirmed that reading text is ordinary message content while correction aggregation is rendered in an attached embed.
+- Detailed templates and `discord.py` mappings are maintained in the companion embed-metadata document.
