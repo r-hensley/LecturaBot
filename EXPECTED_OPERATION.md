@@ -1,0 +1,437 @@
+# LecturaBot Expected Operation and Required Features
+
+**Status:** Discovery draft 0.3
+**Last updated:** 2026-07-10
+**Project basis:** Authorized behavioral reimplementation of a closed-source bot, with the original bot owner's permission.
+
+This is a living specification assembled from user explanations, copied channel output, screenshots, and later clarifications. It describes expected behavior, not a chosen technical design. When the evidence is incomplete, the uncertainty is recorded rather than silently converted into a requirement.
+
+## Evidence labels
+
+- **Confirmed:** Explicitly described in the supplied instructions or by the project owner.
+- **Observed:** Visible in one or more channel examples, but the intended rule may still need confirmation.
+- **Inferred:** Strongly suggested by the examples, but not yet demonstrated directly.
+- **Open:** Not enough information yet.
+
+## 1. Purpose
+
+LecturaBot supports an English-Spanish language-exchange server's group reading sessions.
+
+During a session:
+
+1. Learners take turns reading a text aloud in a voice channel.
+2. The bot maintains the reader queue and identifies the current reader.
+3. The current reader chooses a text at an appropriate language and difficulty, or submits a custom text.
+4. Native speakers listen and submit pronunciation corrections.
+5. The reader reviews the corrections and explicitly ends their turn.
+6. The bot advances the queue to the next reader.
+
+The same session may contain English learners and Spanish learners. A participant can be a learner for one language and a native corrector for the other.
+
+The six normal reading-channel pairs are limited by server policy to spoken and written English or Spanish. A separate **Other Languages** voice/text pair supports other target languages through the bot's custom-text option.
+
+## 2. Participant roles
+
+- **Current reader:** The queued participant whose turn is active.
+- **Waiting reader:** A queued participant waiting for a future turn. Waiting readers may also submit corrections.
+- **Corrector:** A participant listening to the current reader and submitting corrections in the corrector's native language.
+- **Session participant:** Anyone represented in the active reading queue.
+
+The supplied instructions ask people to correct only readers who are reading in the corrector's native language. Whether the bot enforces this or it is only a community rule is still open.
+
+## 3. Expected session flow
+
+1. A user joins one of the six standard reading voice channels, or the separate **Other Languages** voice channel.
+2. The user opens that voice channel's corresponding text channel. The voice and text channel numbers must match.
+3. The user types `/queue` in English or `/cola` in Spanish to interact with the bot.
+4. The user enters the queue through **Enter Queue** / **Unirse** and remains in the associated voice channel.
+5. At least two people must be present before a reading session can start. The guide recommends mentioning the self-assignable `@Sesión de Lectura` role to find another participant.
+6. When the minimum is met and participants are ready, they use **Start Reading** / **Comenzar Lectura**.
+7. A queued user waits for their turn and may submit corrections for the current reader.
+8. When the user's turn begins, the bot mentions them and presents text-selection options.
+9. The reader chooses a stored text level, supplies their own text, or reads from another source. Bot-assisted use in **Other Languages** requires the custom-text choice.
+10. The bot publishes the selected text and associates subsequent corrections with it when the text is supplied to the bot.
+11. The reader reads the text aloud in the voice channel.
+12. Native speakers submit corrections with **Add Corrections** or by replying directly to the reading post. Reply-associated corrections can be reflected or highlighted in that text's bot output.
+13. The reader goes through all corrections.
+14. The reader presses the red **Pass Turn** button to finish.
+15. The bot records the completed turn, updates timing statistics, and activates the next eligible reader.
+
+If nobody remains, the queue displays **Vacío / Empty**.
+
+## 4. Queue and voice-channel behavior
+
+### Confirmed requirements
+
+- The bot interaction is invoked with `/queue` or its Spanish equivalent `/cola` in the text channel corresponding to the user's reading voice channel.
+- The server provides six numbered English-Spanish reading voice channels, each paired with one numbered text channel.
+- At least two people are required before reading can start.
+- Participants use **Start Reading** / **Comenzar Lectura** once they are ready.
+- Users can enter the queue with a button.
+- Users can leave the queue.
+- Leaving loses the user's position; rejoining does not restore the old position.
+- Leaving the associated voice channel also removes the user from the queue and loses their position.
+- The current reader is mentioned when their turn begins.
+- The current reader manually ends a normal turn with **Pass Turn**.
+- Other participants can vote to skip a reader who is absent or AFK.
+- Only a small number of votes is normally needed to skip, but the exact threshold is not known.
+
+### Observed queue display
+
+The queue status is bilingual and follows this general shape:
+
+```text
+Sesión de Lectura / Reading Session | Español-English
+-- Cola / Queue --
+@Reader A | turns: 7 | avg reading time: 06:39
+--> @Reader B <-- | turns: 4 | avg reading time: 05:12
+@Reader C | turns: n/a | avg reading time: n/a
+
+Turno actual comenzó / Current turn started 4 hours ago
+if bugs: ping @ConfiguredBugContact
+if text problem: ping @ConfiguredTextContact
+id: 11996
+```
+
+Observed behavior includes:
+
+- The active reader is wrapped in `-->` and `<--` markers.
+- Queue order remains displayed as a list while the active marker moves between readers.
+- Readers can disappear from and later re-enter the queue.
+- First-time readers display `n/a` for both completed turns and average reading time.
+- A stable numeric ID is displayed throughout the sampled session.
+- The status includes separately configurable contacts for bot bugs and text problems.
+
+### Queue behavior still to confirm
+
+- Whether the rotation is strictly FIFO, round-robin, or has exceptions.
+- Where a newly joined or rejoined user is inserted.
+- Whether the bot technically rejects `/queue`, `/cola`, or **Enter Queue** when the user is not in the matching voice channel; the documented user flow requires joining voice first.
+- What happens when the current reader voluntarily leaves the queue or voice channel.
+- Whether the status is one edited message or a new status message on every transition.
+- Whether `/queue` creates a new session, retrieves a persistent channel-specific session, or only posts the controls for existing state.
+- How a session is closed and when an abandoned or empty session expires.
+- Whether all six channel pairs can run sessions simultaneously. The channel layout implies that their state must at least be isolated from one another.
+- What happens if **Start Reading** is pressed with fewer than two eligible participants.
+- Whether every participant must press **Start Reading**, only one participant starts the session, or the control means something turn-specific.
+- The exact vote threshold and whether it changes with queue size.
+- Who is eligible to vote, how duplicate votes are prevented, and when votes reset.
+- The exact control name for skipping another reader. The Spanish instructions refer to **Pasar turno**, while the English instructions refer to **Skip Turn**.
+
+## 5. Text selection and delivery
+
+### Confirmed requirements
+
+- The bot maintains a database or catalog of reading texts.
+- A learner can select the text difficulty.
+- The bot supports both English and Spanish reading practice.
+- The current reader can submit a custom text instead of selecting a stored one.
+- **Your Own Text** / **Mi propio texto** is the required bot option when reading a language other than English or Spanish.
+- A reader may bring a text from any outside source.
+- The community guide links a shared Google document as an additional place to find texts: [Reading-text resource](https://docs.google.com/document/d/1O2KZYIn1S5xcWHAOvSo3bN2Wx-f-D1qKd9mMW6U5DhM/edit).
+- Participants use **Start Reading** / **Comenzar Lectura** before choosing a text level.
+- The text picker is only offered when it is the reader's turn.
+
+### Observed selection prompt
+
+```text
+@Reader
+Reader - Elige un texto / Pick a text to read
+Usa una opción abajo para elegir un texto. Si quieres practicar un texto en
+inglés, elige un botón con la etiqueta en inglés. / Use an option below to pick
+a text to read. If you want to practice an English text, you'd choose a button
+with the English label.
+```
+
+The prompt has button options, but their complete labels and layout were not present in the copied text.
+
+### Observed reading-post formats
+
+English:
+
+```text
+Reader - Reading - English - Level Intermediate
+Expected Emotion: Realization
+[reading text]
+```
+
+Spanish:
+
+```text
+Reader - Lectura - Español - Nivel Principiante
+[reading text]
+```
+
+Observed content behavior includes:
+
+- **Beginner / Principiante** and **Intermediate / Intermedio** difficulty levels.
+- A language-localized heading for the selected reading.
+- Some texts include optional performance metadata such as `Expected Emotion: Anger` or `Expected Emotion: Realization`.
+- Other texts omit expected-emotion metadata.
+
+### Shared text document
+
+A brief read-only check confirms that the linked **Texts for Sesión de Lectura** document is an external bilingual reading library with these sections:
+
+| Language | Categories in the document |
+| --- | --- |
+| English | Easy, Medium, Hard, Super Hard, SFW Halloween |
+| Spanish | Fácil, Intermedio, Difícil, Super Difícil, SFW Halloween |
+
+Several Batch 1 bot readings also occur in the document. The demonstrated matches establish these label relationships:
+
+| Document category | Bot label seen on an exact matching passage |
+| --- | --- |
+| English Easy | English Level Beginner |
+| English Medium | English Level Intermediate |
+| Spanish Fácil / Easy | Español Nivel Principiante |
+
+For now, this document is treated as a supplemental reading resource and possible source corpus—not as a required live Google Docs integration. Detailed corpus verification and import planning are intentionally deferred.
+
+### Text behavior still to confirm
+
+- The complete list of supported difficulty levels.
+- Whether language and difficulty are selected together or in separate steps.
+- The exact buttons, menus, modals, and timeout behavior.
+- The exact relationship between **Start Reading** and the current-reader text picker.
+- How a custom text is entered, validated, displayed, and moderated.
+- Whether “read from any other source” means the text must be pasted through **Your Own Text**, or whether the reader may read off-platform without creating a bot reading post.
+- Maximum and minimum text length.
+- Whether custom texts become reusable catalog entries.
+- How catalog texts are chosen within a level: random, sequential, weighted, or user-selected.
+- Whether recently used texts are excluded to avoid repetition.
+- What metadata is stored for a catalog text beyond language, level, body, and optional expected emotion.
+- How users report an unsuitable or broken text.
+- How the document's **Hard**, **Super Hard**, and seasonal Halloween categories map to buttons and bot-level labels.
+
+## 6. Corrections
+
+### Confirmed requirements
+
+- Participants may submit corrections while waiting for their own turn.
+- Corrections should only be supplied by someone native in the language being read.
+- Corrections have two documented submission paths: **Add Corrections** and a direct reply to the reading-text message.
+- A participant can reply to the reading message so their corrections are shown or highlighted on the selected text.
+- The reader is expected to review all corrections before passing the turn.
+
+The supplied Spanish guide labels the correction control **Poner Correciones**. This spelling is preserved as observed and should be checked against the live button before it is treated as the required final copy.
+
+### Observed correction summary
+
+Bot reading posts can include a bilingual correction section:
+
+```text
+Correcciones / Corrections : 8
+@Corrector A suggests:
+realization
+stadium
+interesting
+
+@Corrector B suggests:
+fifty thousand
+filled
+```
+
+Observed behavior includes:
+
+- Corrections are attributed to the submitting user.
+- A user may submit multiple correction entries.
+- An entry can be a word, a multiword phrase, or a notation containing alternatives such as `walk / walked`.
+- The summary preserves each corrector's own entries, including an entry also suggested by another person.
+- The displayed total appears to count unique correction strings across correctors. Identical entries such as `serious` contribute once to the total even when shown under two correctors. Small textual differences, including spelling or punctuation, appear capable of producing separate entries. This counting rule is inferred from the examples and needs direct confirmation.
+- Free-form pronunciation explanations and phonetic approximations also appear as ordinary human chat messages after the bot summary. There is no evidence yet that the bot parses or stores those follow-up messages.
+
+### Correction behavior still to confirm
+
+- What the **Add Corrections** button opens and what input format it accepts.
+- How a button-submitted correction is associated with the active reader and reading post.
+- How reply text is parsed into one or more correction entries.
+- The behavioral difference between the button and reply paths. Earlier instructions specifically associate replies with displaying or highlighting corrections in the selected text.
+- How the bot visually highlights a correction inside the original text.
+- Whether matching is case-sensitive, accent-sensitive, punctuation-sensitive, or token-based.
+- Whether correcting phrases that occur multiple times highlights every occurrence or a selected occurrence.
+- Whether a corrector can edit or delete a submitted correction.
+- When correction submission closes.
+- Whether the reader can pass before reviewing every correction or the instruction is advisory.
+- Whether native-language eligibility is enforced through server roles, user settings, or not enforced technically.
+- Whether correction history is retained after a session ends.
+
+## 7. Turns and timing statistics
+
+### Observed behavior
+
+- Each participant has a completed-turn count.
+- Each participant has an average reading time formatted as `MM:SS`.
+- Both fields show `n/a` until the participant completes a turn.
+- When a reader finishes, their turn count increases and their average changes.
+- The status includes a relative `Current turn started` time.
+
+### Timing behavior still to confirm
+
+- Whether `turns` and `avg reading time` are scoped to the current session, server, user lifetime, language, or some combination.
+- Whether timing runs from activation to **Pass Turn**, from text publication to **Pass Turn**, or only during the spoken reading.
+- Whether time spent selecting a text or reviewing corrections is included.
+- How skipped, abandoned, or disconnected turns affect statistics.
+- Rounding rules and behavior for readings longer than 59 minutes.
+- Whether the relative start time in the sample is intended behavior. It remained several hours old across multiple reader changes, despite being labeled as the current turn's start, so it may represent a session start or an existing bot defect.
+
+## 8. Localization and presentation
+
+- Core workflow output is bilingual Spanish-English.
+- `/queue` and `/cola` are the documented English and Spanish command forms.
+- Queue headings, empty state, instructions, and correction headings are bilingual.
+- Reading headings are localized to the language being practiced.
+- Important buttons have localized labels, including **Start Reading** / **Comenzar Lectura**, **Pass Turn** / **Pasar Turno**, and **Your Own Text** / **Mi propio texto**.
+- The pass-turn control is described as red.
+- User mentions must use Discord mentions so readers receive a notification.
+- User display names may contain spaces, Unicode characters, and decorative characters.
+- Text content must preserve Spanish accents, typographic apostrophes, punctuation, and paragraph formatting.
+- Bug-report and text-problem contacts should be configurable rather than hard-coded to the sampled accounts.
+
+It is still open whether Discord command localization automatically chooses the command and button language, whether separate localized control messages are posted, or whether all core session output is always bilingual.
+
+## 9. Server integration and channel topology
+
+### Standard English-Spanish channel pairs
+
+| Voice channel | Corresponding text channel |
+| --- | --- |
+| `📚￤Lectura 1` | `📚・lectura-text-1` |
+| `📚￤Lectura 2` | `📚・lectura-text-2` |
+| `📚￤Lectura 3` | `📚・lectura-text-3` |
+| `📚￤Lectura 4` | `📚・lectura-text-4` |
+| `📚￤Lectura 5` | `📚・lectura-text-5` |
+| `📚￤Lectura 6` | `📚・lectura-text-6` |
+
+The user must invoke and use the bot in the text channel paired with their current voice channel. Each pair therefore needs isolated queue, turn, reading, correction, and timing state.
+
+### Other languages
+
+- Other languages are restricted to `📙￤Other Languages` and its corresponding `📙・lectura-other-lang` text channel.
+- In this channel, the bot can still manage the session, but the reader must select **Your Own Text** / **Mi propio texto** rather than use an English-Spanish catalog text.
+
+### Community notification role and language policy
+
+- `@Sesión de Lectura` is an optional, self-assignable role available through Discord's **Channels & Roles** interface.
+- Participants are encouraged to mention this role and ask for a native speaker before starting, because at least two people are required.
+- Only English and Spanish speech and messages are allowed in the six standard reading-channel pairs.
+- The language restriction and role assignment appear to be server policy and Discord configuration, not necessarily behavior that this bot must enforce or manage.
+
+## 10. Provisional data the behavior requires
+
+This is a behavioral inventory, not a database-schema decision.
+
+### Reading session
+
+- Server association
+- Configured voice/text channel pair
+- Session language mode: standard English-Spanish or other-language custom text
+- Session ID
+- Minimum participant count
+- Queue membership and order
+- Current reader
+- Current-turn state and timestamps
+- Skip votes
+- Configured support contacts
+- Optional reading-session notification role
+
+### Participant state
+
+- Discord user identity
+- Queue position
+- Completed-turn count
+- Accumulated or average turn time
+- Possibly native and learning languages
+
+### Reading text
+
+- Language
+- Difficulty
+- Text body
+- Optional expected emotion
+- Catalog text versus user-supplied text
+- Target language for a custom text
+- Source category and seasonal classification, where applicable
+- Enabled/disabled state and use history
+
+### Active reading and corrections
+
+- Reader and selected text
+- Reading-post identity
+- Turn timestamps and outcome
+- Correction text
+- Corrector identity
+- Submission order
+- Link to the active reading
+- Submission path: correction button or message reply
+- Highlight or match information, if needed
+
+## 11. Required feature inventory
+
+The reimplementation is presently expected to need:
+
+- A bilingual Discord reading-session interface.
+- `/queue` and `/cola` slash-command entry points.
+- Configurable, isolated voice/text channel pairs, including the six documented standard pairs and the separate other-language pair.
+- A queue tied to matching voice-channel presence.
+- A two-participant minimum and **Start Reading** action.
+- Enter, leave, red pass-turn, and vote-to-skip actions.
+- Automatic removal when a queued user leaves voice.
+- Current-reader mentions and queue-status updates.
+- A Spanish-English text catalog with difficulty selection.
+- A current-reader text picker.
+- A custom-text submission path, including for languages outside English and Spanish.
+- Reading-post rendering with optional metadata.
+- **Add Corrections** and reply-associated correction capture.
+- Correction attribution, aggregation, counting, and text highlighting.
+- Completed-turn and average-time tracking.
+- An empty-queue state.
+- Configurable bot-bug and content-problem contacts.
+- Safe handling of Unicode names and bilingual text.
+
+The server also uses an optional `@Sesión de Lectura` notification role, a public reading-text document, and channel-level language rules. These are confirmed parts of the surrounding workflow, but it is not yet established that LecturaBot itself owns their management.
+
+Restart recovery, administration tools, catalog editing, moderation, logging, and data-retention behavior are likely necessary for a production bot but have not yet been demonstrated as original-bot behavior.
+
+## 12. Discovery questions for future evidence
+
+The most useful future examples would show:
+
+1. The complete response to `/queue` and `/cola`, with every button visible.
+2. What **Start Reading** does, who can press it, and how the two-person minimum is enforced.
+3. Joining, leaving, and automatic removal after leaving voice.
+4. A complete text-selection interaction at every available difficulty.
+5. How **Hard**, **Super Hard**, and Halloween texts appear in the bot picker.
+6. The **Your Own Text** / **Mi propio texto** submission flow, including use in another language.
+7. The interface opened by **Add Corrections**.
+8. A reply correction being submitted and the bot message changing afterward.
+9. A highlighted correction inside a reading text.
+10. A reader pressing **Pass Turn**.
+11. Several people voting to skip an AFK reader.
+12. Session shutdown or expiration after a queue becomes empty.
+13. Behavior when the command is used from the wrong text channel or without joining voice.
+14. Any administrator or text-database management commands.
+
+## 13. Evidence log
+
+### Batch 1: Raw reading-channel transcript
+
+- Demonstrated one mixed English-Spanish reading session.
+- Showed queue rotation, queue departures and re-entry, empty state, turn counts, average times, current-reader markers, session ID, support contacts, text-picker prompt, Beginner and Intermediate texts, optional expected emotions, and grouped correction summaries.
+- Did not show the user-side commands or button interactions that produced most state changes.
+
+### Batch 2: Bilingual instruction post
+
+- Confirmed button-based queue entry, loss of position on queue or voice-channel departure, corrections while waiting, reply-associated highlighting, current-reader mention and selection, custom texts, manual passing after correction review, AFK skip voting, and the native-language correction policy.
+- The accompanying local clipboard image was unavailable, so no visual-only button labels or layout details were added beyond the pasted text.
+
+### Batch 3: Server onboarding and Staff Team reading-session guide
+
+- The English-Spanish onboarding copy documents `/queue` and `/cola`, a minimum of two participants, **Pass Turn**, the optional `@Sesión de Lectura` role, and the regular-channel English-Spanish-only policy.
+- A Staff Team guide dated 2025-12-22 documents the six matched voice/text channel pairs, **Start Reading** / **Comenzar Lectura**, level selection, outside texts, two correction methods, and the red pass-turn control.
+- A further bot post documents the separate **Other Languages** channel pair and requires **Your Own Text** / **Mi propio texto** for bot-assisted reading in another language.
+- The guide links a Google document as a supplemental text source.
+
+### Batch 4: Read-only inspection of the linked text document
+
+- Confirmed that it is an external English-Spanish reading library with Easy, Medium, Hard, Super Hard, and SFW Halloween sections. Several bot examples occur in it, but deeper corpus auditing is deferred because the current goal is documenting bot operation.
