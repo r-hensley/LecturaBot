@@ -20,25 +20,17 @@ LOGGER = logging.getLogger(__name__)
 
 
 class LecturaCog(commands.Cog):
-    """Expose the two command aliases and gateway-driven correction events."""
+    """Expose the temporary test command and gateway-driven correction events."""
 
     def __init__(self, controller: LecturaController) -> None:
         self.controller = controller
 
     @app_commands.command(
-        name="queue",
-        description="Open the bilingual reading-session queue.",
+        name="lecturatest",
+        description="Open the temporary LecturaBot test queue.",
     )
     @app_commands.guild_only()
-    async def queue(self, interaction: discord.Interaction) -> None:
-        await self.controller.show_queue(interaction)
-
-    @app_commands.command(
-        name="cola",
-        description="Abre la cola bilingüe de la sesión de lectura.",
-    )
-    @app_commands.guild_only()
-    async def cola(self, interaction: discord.Interaction) -> None:
+    async def lecturatest(self, interaction: discord.Interaction) -> None:
         await self.controller.show_queue(interaction)
 
     @commands.Cog.listener()
@@ -101,6 +93,15 @@ class LecturaBot(commands.Bot):
         if self.config.dev_guild_id is not None:
             guild = discord.Object(id=self.config.dev_guild_id)
             self.tree.copy_global_to(guild=guild)
+            # Development commands are guild-scoped for immediate updates.
+            # Also synchronize an empty global tree so aliases from an older
+            # LecturaBot deployment do not remain registered remotely.
+            self.tree.clear_commands(guild=None)
+            removed_global = await self.tree.sync()
+            LOGGER.info(
+                "synchronized global command cleanup; %s commands remain",
+                len(removed_global),
+            )
             synced = await self.tree.sync(guild=guild)
             LOGGER.info(
                 "synced %s application commands to development guild %s",

@@ -12,7 +12,7 @@ The implementation follows the observed behavior in [EXPECTED_OPERATION.md](EXPE
 
 ## What is implemented
 
-- `/queue` and `/cola` application commands
+- Temporary `/lecturatest` application command while the original bot remains active
 - One independent session per configured voice/text channel pair
 - Voice-channel validation and automatic removal after leaving voice
 - Persistent, stale-safe queue, picker, and reading controls
@@ -32,7 +32,7 @@ The implementation follows the observed behavior in [EXPECTED_OPERATION.md](EXPE
 ## POC decisions where the source behavior is unresolved
 
 - The server guide confirms a **Start Reading** action, but it was absent from the captured queue component dump. This POC appends a provisional `Comenzar Lectura / Start Reading` button with `custom_id="start_reading"` while leaving all observed controls unchanged.
-- `/queue` and `/cola` maintain one canonical queue panel per channel pair and edit it after mutations instead of intentionally posting a new queue message every time.
+- `/lecturatest` maintains one canonical queue panel per channel pair and edits it after mutations instead of intentionally posting a new queue message every time. The planned final command names remain `/queue` and `/cola` after the original bot is retired.
 - A session pauses when fewer than two queued voice participants remain. It must be started again after the second participant returns.
 - Reading time runs from publication of the reading text until a normal current-reader pass. Selection time, skipped turns, and disconnected turns do not affect statistics.
 - The configured skip-vote threshold defaults to two in code and is reduced to the number of eligible non-current queued readers.

@@ -713,7 +713,7 @@ class SessionService:
         if state is None:
             raise SessionError(
                 "no_session",
-                "Usa /queue o /cola primero. / Use /queue or /cola first.",
+                "Usa /lecturatest primero. / Use /lecturatest first.",
             )
         return state
 
