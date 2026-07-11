@@ -81,15 +81,24 @@ class MemberState:
 class CorrectionEntry:
     text: str
     source: CorrectionSource
+    discarded: bool = False
 
-    def to_dict(self) -> dict[str, str]:
-        return {"text": self.text, "source": self.source.value}
+    def to_dict(self) -> dict[str, str | bool]:
+        return {
+            "text": self.text,
+            "source": self.source.value,
+            "discarded": self.discarded,
+        }
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> CorrectionEntry:
         return cls(
             text=str(data["text"]),
             source=CorrectionSource(str(data["source"])),
+            # Snapshots written before duplicate tracking did not include this
+            # field. Treat their entries as accepted rather than rejecting an
+            # otherwise valid active session during startup recovery.
+            discarded=bool(data.get("discarded", False)),
         )
 
 
@@ -134,13 +143,13 @@ class ActiveReading:
 
     @property
     def correction_count(self) -> int:
-        """Count exact trimmed correction strings once across correctors."""
+        """Count normalized suggestions once across all correctors."""
         return len(
             {
-                entry.text.strip()
+                self._normalize_correction(entry.text)
                 for group in self.correction_groups
                 for entry in group.entries
-                if entry.text.strip()
+                if self._normalize_correction(entry.text)
             }
         )
 
@@ -172,7 +181,33 @@ class ActiveReading:
             group = CorrectionGroup(corrector_id, corrector_display_name)
             self.correction_groups.append(group)
         group.display_name = corrector_display_name
-        group.entries.extend(CorrectionEntry(item, source) for item in items)
+
+        # Groups are organized by corrector for display, not submission time.
+        # Persist the discard decision now so a later submission to an earlier
+        # group cannot make rendering infer the chronology incorrectly.
+        owners_by_suggestion: dict[str, set[int]] = {}
+        for existing_group in self.correction_groups:
+            for entry in existing_group.entries:
+                normalized = self._normalize_correction(entry.text)
+                if normalized:
+                    owners_by_suggestion.setdefault(normalized, set()).add(
+                        existing_group.user_id
+                    )
+
+        for item in items:
+            normalized = self._normalize_correction(item)
+            prior_owners = owners_by_suggestion.get(normalized, set())
+            discarded = bool(prior_owners - {corrector_id})
+            group.entries.append(CorrectionEntry(item, source, discarded))
+            if normalized:
+                owners_by_suggestion.setdefault(normalized, set()).add(
+                    corrector_id
+                )
+
+    @staticmethod
+    def _normalize_correction(value: str) -> str:
+        """Return the comparison key used for duplicate suggestions."""
+        return " ".join(value.split()).casefold()
 
     def to_dict(self) -> dict[str, Any]:
         return {

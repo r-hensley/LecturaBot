@@ -191,7 +191,12 @@ def build_corrections_embed(reading: ActiveReading) -> discord.Embed:
     blocks: list[str] = []
     for group in reading.correction_groups:
         items = "\n".join(
-            f"**{_escape_user_text(entry.text)}**" for entry in group.entries
+            (
+                f"~~{_escape_user_text(entry.text)}~~"
+                if entry.discarded
+                else f"**{_escape_user_text(entry.text)}**"
+            )
+            for entry in group.entries
         )
         blocks.append(f"<@{group.user_id}> suggests:\n{items}")
     description = "\n\n".join(blocks) if blocks else NO_CORRECTIONS

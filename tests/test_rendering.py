@@ -131,10 +131,43 @@ def test_picker_and_reading_render_exact_text_and_highlights() -> None:
         "**abducted**\n"
         "\n"
         "<@30> suggests:\n"
-        "**abducted**\n"
+        "~~abducted~~\n"
         "**not present**"
     )
     assert corrections.colour is None
+
+
+def test_duplicate_correction_uses_strikethrough_without_bold() -> None:
+    reading = ActiveReading(
+        reader_id=10,
+        reader_display_name="Reader",
+        language=Language.ENGLISH,
+        level=Level.BEGINNER,
+        body="New York",
+        started_at=100,
+    )
+    reading.add_corrections(
+        corrector_id=20,
+        corrector_display_name="First",
+        items=["New York"],
+        source=CorrectionSource.BUTTON,
+    )
+    reading.add_corrections(
+        corrector_id=30,
+        corrector_display_name="Second",
+        items=["new york"],
+        source=CorrectionSource.REPLY,
+    )
+
+    embed = build_corrections_embed(reading)
+    assert embed.title == "Correcciones / Corrections : 1"
+    assert embed.description == (
+        "<@20> suggests:\n"
+        "**New York**\n\n"
+        "<@30> suggests:\n"
+        "~~new york~~"
+    )
+    assert "**~~new york~~**" not in embed.description
 
 
 def _button_contract(view: discord.ui.View) -> list[tuple[str, str, int, int]]:

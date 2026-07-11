@@ -82,6 +82,83 @@ def test_snapshot_rejects_unsupported_version() -> None:
         SessionState.from_dict(payload)
 
 
+def test_duplicate_corrections_preserve_submission_chronology() -> None:
+    reading = ActiveReading(
+        reader_id=10,
+        reader_display_name="Reader",
+        language=Language.ENGLISH,
+        level=Level.BEGINNER,
+        body="Alpha beta.",
+        started_at=100,
+    )
+    reading.add_corrections(
+        corrector_id=20,
+        corrector_display_name="First",
+        items=["alpha"],
+        source=CorrectionSource.BUTTON,
+    )
+    reading.add_corrections(
+        corrector_id=30,
+        corrector_display_name="Second",
+        items=["Beta"],
+        source=CorrectionSource.REPLY,
+    )
+    # This entry is appended to the first group, which appears before the
+    # second group even though this submission happened last.
+    reading.add_corrections(
+        corrector_id=20,
+        corrector_display_name="First",
+        items=["  bEtA  "],
+        source=CorrectionSource.BUTTON,
+    )
+
+    first_group, second_group = reading.correction_groups
+    assert second_group.entries[0].discarded is False
+    assert first_group.entries[1].discarded is True
+    assert reading.correction_count == 2
+
+
+def test_duplicate_normalization_and_legacy_snapshot_loading() -> None:
+    reading = ActiveReading(
+        reader_id=10,
+        reader_display_name="Reader",
+        language=Language.ENGLISH,
+        level=Level.INTERMEDIATE,
+        body="New York",
+        started_at=100,
+    )
+    reading.add_corrections(
+        corrector_id=20,
+        corrector_display_name="First",
+        items=["New   York"],
+        source=CorrectionSource.BUTTON,
+    )
+    reading.add_corrections(
+        corrector_id=30,
+        corrector_display_name="Second",
+        items=["new york"],
+        source=CorrectionSource.REPLY,
+    )
+
+    payload = reading.to_dict()
+    assert payload["correction_groups"][1]["entries"][0]["discarded"] is True
+    assert ActiveReading.from_dict(payload) == reading
+    assert reading.correction_count == 1
+
+    # Older snapshots remain readable when the newly persisted flag is absent.
+    legacy_payload = reading.to_dict()
+    for group in legacy_payload["correction_groups"]:
+        for entry in group["entries"]:
+            entry.pop("discarded")
+    restored = ActiveReading.from_dict(legacy_payload)
+    assert all(
+        not entry.discarded
+        for group in restored.correction_groups
+        for entry in group.entries
+    )
+    assert restored.correction_count == 1
+
+
 @pytest.mark.parametrize(
     ("state", "message"),
     [
