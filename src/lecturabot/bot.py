@@ -17,6 +17,10 @@ from .views import QueueView, ReadingView, TextPickerView
 
 
 LOGGER = logging.getLogger(__name__)
+CATALOG_SEED_RESOURCES = (
+    "data/readings.json",
+    "data/google_doc_readings.json",
+)
 
 
 class LecturaCog(commands.Cog):
@@ -75,13 +79,13 @@ class LecturaBot(commands.Bot):
 
     async def setup_hook(self) -> None:
         await self.repository.initialize()
-        seed_resource = resources.files("lecturabot").joinpath(
-            "data/readings.json"
-        )
-        # ``as_file`` also supports packaged resources that are not represented
-        # by a normal filesystem path.
-        with resources.as_file(seed_resource) as seed_path:
-            inserted = await self.repository.seed_texts(seed_path)
+        inserted = 0
+        for resource_name in CATALOG_SEED_RESOURCES:
+            seed_resource = resources.files("lecturabot").joinpath(resource_name)
+            # ``as_file`` also supports packaged resources that are not
+            # represented by a normal filesystem path.
+            with resources.as_file(seed_resource) as seed_path:
+                inserted += await self.repository.seed_texts(seed_path)
         LOGGER.info("reading catalog ready; inserted %s seed texts", inserted)
         await self.service.initialize()
 

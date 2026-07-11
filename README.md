@@ -1,6 +1,6 @@
 # LecturaBot proof of concept
 
-LecturaBot is a professional proof of concept for a bilingual Discord reading-session assistant. It manages isolated voice/text channel queues, reader turns, a small English-Spanish text catalog, user-supplied texts, pronunciation corrections, AFK skip votes, and reading-time statistics.
+LecturaBot is a professional proof of concept for a bilingual Discord reading-session assistant. It manages isolated voice/text channel queues, reader turns, a bundled offline English-Spanish text catalog, user-supplied texts, pronunciation corrections, AFK skip votes, and reading-time statistics.
 
 ## Documentation
 
@@ -17,7 +17,7 @@ The implementation follows the observed behavior in [EXPECTED_OPERATION.md](EXPE
 - Voice-channel validation and automatic removal after leaving voice
 - Persistent, stale-safe queue, picker, and reading controls
 - Explicit two-participant start gate
-- Beginner, Intermediate, and Advanced catalog choices in English and Spanish
+- Beginner, Intermediate, and Advanced catalog choices backed by 1,027 bundled English and Spanish passages
 - Custom-text modal, including a language label in the Other Languages channel
 - Correction modal and reply-to-reading correction capture
 - Case-insensitive, all-occurrence highlights that preserve the source casing
@@ -80,6 +80,27 @@ unique, then restart the bot to apply the change.
 
 For quick slash-command updates during development, set `dev_guild_id` in `config.toml`. Without it, commands are synced globally and may take longer to appear.
 
+## Reading catalog
+
+The bot does not contact Google Docs while running. At startup it idempotently
+seeds SQLite from two packaged files:
+
+- `data/readings.json`: the original 12 POC passages
+- `data/google_doc_readings.json`: 1,015 passages generated from the committed
+  snapshot of the community's **Texts for Sesión de Lectura** document
+
+The raw export is kept at `sources/google_doc_readings.txt`. Its original Easy,
+Medium, Hard, Super Hard, and SFW Halloween categories are retained as metadata.
+Because the Discord picker has three levels, Easy maps to Beginner, Medium maps
+to Intermediate, and Hard, Super Hard, and Halloween map to Advanced.
+
+To verify that the generated catalog still matches the snapshot:
+
+```bash
+/mnt/c/Users/ryry0/Documents/Python/.venv/bin/python \
+  scripts/build_google_doc_catalog.py --check
+```
+
 ## Run
 
 Run directly from the checkout without modifying the shared virtual environment:
@@ -118,16 +139,20 @@ src/lecturabot/
   views.py        Persistent views and input modals
 
 src/lecturabot/data/readings.json
-  Small original seed catalog used only for the POC
+  Original 12-passage POC seed catalog
+
+src/lecturabot/data/google_doc_readings.json
+  Generated 1,015-passage offline Google Doc catalog
+
+sources/google_doc_readings.txt
+  Vendored plain-text Google Doc export
+
+scripts/build_google_doc_catalog.py
+  Validated source-to-catalog generator
 ```
 
 ## Remaining TODO and decisions
 
-- **Choose the catalog source of truth.** Decide whether reading texts will be
-  maintained in GitHub, an external document, or a future staff interface. If
-  GitHub becomes authoritative, add stable text identifiers and synchronization
-  semantics so edits, removals, and disabled texts are reflected in SQLite;
-  the current seed loader is intentionally additive only.
 - **Add lightweight SQLite maintenance.** Keep SQLite for this bot's expected
   scale, but establish a safe periodic backup procedure and add schema
   migrations whenever the stored format changes.

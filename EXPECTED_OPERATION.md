@@ -217,22 +217,28 @@ Observed content behavior includes:
 
 ### Shared text document
 
-A brief read-only check confirms that the linked **Texts for Sesión de Lectura** document is an external bilingual reading library with these sections:
+The linked **Texts for Sesión de Lectura** document is an external bilingual reading library with these sections:
 
 | Language | Categories in the document |
 | --- | --- |
 | English | Easy, Medium, Hard, Super Hard, SFW Halloween |
 | Spanish | Fácil, Intermedio, Difícil, Super Difícil, SFW Halloween |
 
-Several Batch 1 bot readings also occur in the document. The demonstrated matches establish these label relationships:
+Several Batch 1 bot readings also occur in the document. The clone vendors a
+plain-text snapshot and generates 1,015 validated catalog records from it. The
+running bot uses only the generated local JSON and never depends on Google Docs
+availability.
 
-| Document category | Bot label seen on an exact matching passage |
+| Document category | Clone catalog level |
 | --- | --- |
-| English Easy | English Level Beginner |
-| English Medium | English Level Intermediate |
-| Spanish Fácil / Easy | Español Nivel Principiante |
+| Easy / Fácil | Beginner / Principiante |
+| Medium / Intermedio | Intermediate / Intermedio |
+| Hard / Difícil | Advanced / Avanzado |
+| Super Hard / Super Difícil | Advanced / Avanzado |
+| SFW Halloween | Advanced / Avanzado |
 
-For now, this document is treated as a supplemental reading resource and possible source corpus—not as a required live Google Docs integration. Detailed corpus verification and import planning are intentionally deferred.
+The original 12 POC passages remain a separate seed, giving the packaged catalog
+1,027 total passages. Startup inserts both seed files idempotently into SQLite.
 
 ### Text behavior still to confirm
 
@@ -247,7 +253,6 @@ For now, this document is treated as a supplemental reading resource and possibl
 - Whether recently used texts are excluded to avoid repetition.
 - What metadata is stored for a catalog text beyond language, level, body, and optional expected emotion.
 - How users report an unsuitable or broken text.
-- How the document's **Hard**, **Super Hard**, and seasonal Halloween categories map to buttons and bot-level labels.
 
 ## 6. Corrections
 
@@ -513,9 +518,12 @@ The most useful future examples would show:
 - A further bot post documents the separate **Other Languages** channel pair and requires **Your Own Text** / **Mi propio texto** for bot-assisted reading in another language.
 - The guide links a Google document as a supplemental text source.
 
-### Batch 4: Read-only inspection of the linked text document
+### Batch 4: Inspection and offline integration of the linked text document
 
-- Confirmed that it is an external English-Spanish reading library with Easy, Medium, Hard, Super Hard, and SFW Halloween sections. Several bot examples occur in it, but deeper corpus auditing is deferred because the current goal is documenting bot operation.
+- Confirmed that it is an external English-Spanish reading library with Easy,
+  Medium, Hard, Super Hard, and SFW Halloween sections. A later full audit
+  extracted 1,015 unique passages into a validated local catalog snapshot so
+  runtime operation does not depend on Google Docs.
 
 ### Batch 5: Bot embed and component export
 

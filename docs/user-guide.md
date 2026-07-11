@@ -63,6 +63,10 @@ Catalog choices are available in both languages:
 - **Español Principiante**, **Español Intermedio**, or **Español Avanzado**
 - **English Beginner**, **English Intermediate**, or **English Advanced**
 
+The shared catalog is bundled with the bot from the community reading-text
+document, so choosing a passage does not open Google Docs or require an external
+link.
+
 To bring your own passage, choose one of these instead:
 
 - **Tu propio texto / Your own text - Español**
@@ -211,6 +215,10 @@ El catálogo ofrece tres niveles en ambos idiomas:
 
 - **Español Principiante**, **Español Intermedio** o **Español Avanzado**
 - **English Beginner**, **English Intermediate** o **English Advanced**
+
+El catálogo compartido está incluido dentro del bot a partir del documento
+comunitario de textos; elegir un texto no abre Google Docs ni requiere un enlace
+externo.
 
 Para usar tu propio texto, elige:
 
