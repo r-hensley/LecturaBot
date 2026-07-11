@@ -117,13 +117,24 @@ src/lecturabot/data/readings.json
   Small original seed catalog used only for the POC
 ```
 
-## Production work deliberately deferred
+## Remaining TODO and decisions
 
-- Native-language role enforcement
-- Catalog administration and moderated imports
-- Multi-process coordination beyond one bot process
-- A fully asynchronous production database adapter; this POC uses short local `sqlite3` transactions behind an async repository interface
-- Full audit/event tables instead of JSON session snapshots
-- Notification-role management
-- Google Docs integration
-- Final copy and layout for interaction errors and modal fields
+- **Choose the catalog source of truth.** Decide whether reading texts will be
+  maintained in GitHub, an external document, or a future staff interface. If
+  GitHub becomes authoritative, add stable text identifiers and synchronization
+  semantics so edits, removals, and disabled texts are reflected in SQLite;
+  the current seed loader is intentionally additive only.
+- **Add lightweight SQLite maintenance.** Keep SQLite for this bot's expected
+  scale, but establish a safe periodic backup procedure and add schema
+  migrations whenever the stored format changes.
+- **Continue UX polish from live testing.** Refine bilingual interaction copy,
+  modal labels, validation feedback, and component layout when concrete user
+  feedback identifies an improvement.
+- **Restore the final command names.** After the original bot is retired,
+  replace temporary `/lecturatest` with `/queue` and `/cola` and remove the
+  test command during the same deployment.
+
+The following are not planned requirements: native-language role enforcement,
+multi-process coordination, replacing SQLite with a server database, full
+audit/event history, or bot-managed notification-role subscriptions. These can
+be reconsidered only if future usage demonstrates a concrete need.
