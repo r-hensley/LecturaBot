@@ -55,8 +55,8 @@ def test_active_and_empty_queue_embeds_match_metadata_contract() -> None:
     assert embed.title == QUEUE_TITLE
     assert embed.description == (
         "**-- Cola / Queue --**\n"
-        "<@100> | turns: *n/a* | avg reading time: *n/a*\n"
-        "__**--> <@200> <--** | turns: *4* | avg reading time: *05:12*__\n"
+        "__**1. --> <@200> <--** | turns: *4* | avg reading time: *05:12*__\n"
+        "**2.** <@100> | turns: *n/a* | avg reading time: *n/a*\n"
         "\n"
         "Turno actual comenzó / Current turn started <t:1720000000:R>\n"
         "if bugs: ping <@900>\n"
@@ -81,6 +81,35 @@ def test_active_and_empty_queue_embeds_match_metadata_contract() -> None:
         "if text problem: ping <@901>"
     )
     assert empty_embed.footer.text is None
+
+
+def test_waiting_queue_positions_follow_join_order() -> None:
+    waiting = SessionState(
+        session_id=12001,
+        guild_id=1,
+        text_channel_id=101,
+        voice_channel_id=201,
+        queue=[100, 200],
+        members={
+            100: MemberState(100, "First"),
+            200: MemberState(200, "Second", turns=1, total_seconds=65),
+        },
+    )
+
+    embed = build_queue_embed(
+        waiting,
+        bug_contact_user_id=900,
+        text_contact_user_id=901,
+    )
+
+    assert embed.description == (
+        "**-- Cola / Queue --**\n"
+        "**1.** <@100> | turns: *n/a* | avg reading time: *n/a*\n"
+        "**2.** <@200> | turns: *1* | avg reading time: *01:05*\n"
+        "\n"
+        "if bugs: ping <@900>\n"
+        "if text problem: ping <@901>"
+    )
 
 
 def test_picker_and_reading_render_exact_text_and_highlights() -> None:

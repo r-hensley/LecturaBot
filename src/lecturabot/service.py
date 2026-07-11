@@ -805,7 +805,8 @@ class SessionService:
         # gives failure and restart recovery a valid control to return to.
 
     def _advance(self, state: SessionState) -> None:
-        # Keep queue display order stable and move only the current marker.
+        # Keep durable join order stable and move only the current marker.
+        # Rendering rotates this list so the active reader appears as #1.
         current_index = state.current_index or 0
         if len(state.queue) < self.minimum_participants:
             self._set_waiting(state)

@@ -252,9 +252,9 @@ class ActiveReading:
 class SessionState:
     """Authoritative state for one configured text/voice channel pair.
 
-    Queue order stays stable while ``current_index`` moves through it. This
-    mirrors the captured bot output and avoids mutating a participant's visible
-    position after every turn.
+    Stored queue order stays stable while ``current_index`` moves through it.
+    Renderers may rotate that order to show turn-relative positions without
+    mutating fairness or the durable join order.
     """
 
     session_id: int

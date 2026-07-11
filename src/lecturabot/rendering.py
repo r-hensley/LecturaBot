@@ -50,19 +50,28 @@ def build_queue_embed(
         )
         return discord.Embed(title=QUEUE_TITLE, description="\n".join(lines))
 
+    # Queue positions are turn-relative: 1 is the current reader, 2 is next,
+    # and so on. The durable queue itself remains in join order, so rotating
+    # this display does not change fairness or the state machine.
+    display_queue = state.queue
+    if state.current_index is not None:
+        display_queue = (
+            state.queue[state.current_index :] + state.queue[: state.current_index]
+        )
+
     current_user_id = state.current_user_id
-    for user_id in state.queue:
+    for position, user_id in enumerate(display_queue, start=1):
         member = state.members[user_id]
         turns = "n/a" if member.turns == 0 else str(member.turns)
         average = format_average(member.average_seconds)
         if user_id == current_user_id:
             lines.append(
-                f"__**--> <@{user_id}> <--** | turns: *{turns}* "
+                f"__**{position}. --> <@{user_id}> <--** | turns: *{turns}* "
                 f"| avg reading time: *{average}*__"
             )
         else:
             lines.append(
-                f"<@{user_id}> | turns: *{turns}* "
+                f"**{position}.** <@{user_id}> | turns: *{turns}* "
                 f"| avg reading time: *{average}*"
             )
 
