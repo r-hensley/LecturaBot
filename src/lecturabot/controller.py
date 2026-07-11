@@ -77,17 +77,13 @@ class LecturaController:
         try:
             pair, member = self._interaction_context(interaction)
             self._require_matching_voice(member, pair)
-            await interaction.response.defer(ephemeral=True, thinking=True)
+            await interaction.response.defer(thinking=True)
             async with self._ui_lock_for(pair.text_channel_id):
                 state = await self.service.get_or_create_session(
                     guild_id=interaction.guild_id or 0,
                     pair=pair,
                 )
-                message = await self._refresh_queue(state)
-            await interaction.followup.send(
-                "Cola lista / Queue ready: " + message.jump_url,
-                ephemeral=True,
-            )
+                await self._publish_queue_interaction(interaction, state)
         except SessionError as error:
             await self._send_error(interaction, error.user_message)
         except Exception:
@@ -648,20 +644,7 @@ class LecturaController:
                 view=QueueView(self),
                 allowed_mentions=discord.AllowedMentions.none(),
             )
-            try:
-                await self.service.set_queue_message(
-                    state.text_channel_id,
-                    message.id,
-                )
-            except Exception:
-                try:
-                    await message.edit(view=None)
-                except discord.HTTPException:
-                    LOGGER.exception(
-                        "failed to retire unpublished queue message %s",
-                        message.id,
-                    )
-                raise
+            await self._persist_queue_message(state, message)
             if repost and previous_message_id is not None:
                 await self._retire_message(
                     state.text_channel_id,
@@ -674,6 +657,43 @@ class LecturaController:
             allowed_mentions=discord.AllowedMentions.none(),
         )
         return message
+
+    async def _publish_queue_interaction(
+        self,
+        interaction: discord.Interaction,
+        state: SessionState,
+    ) -> discord.InteractionMessage:
+        """Use the command's public response as a fresh queue panel."""
+        previous_message_id = state.queue_message_id
+        message = await interaction.edit_original_response(
+            embed=self._queue_embed(state),
+            view=QueueView(self),
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+        await self._persist_queue_message(state, message)
+        if previous_message_id is not None and previous_message_id != message.id:
+            await self._retire_message(state.text_channel_id, previous_message_id)
+        return message
+
+    async def _persist_queue_message(
+        self,
+        state: SessionState,
+        message: discord.Message,
+    ) -> None:
+        try:
+            await self.service.set_queue_message(
+                state.text_channel_id,
+                message.id,
+            )
+        except Exception:
+            try:
+                await message.edit(view=None)
+            except discord.HTTPException:
+                LOGGER.exception(
+                    "failed to retire unpublished queue message %s",
+                    message.id,
+                )
+            raise
 
     async def _send_picker(self, state: SessionState) -> None:
         member = state.current_member

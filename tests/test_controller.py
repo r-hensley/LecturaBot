@@ -5,9 +5,9 @@ from typing import Any
 
 import pytest
 
-from lecturabot.config import BotConfig
+from lecturabot.config import BotConfig, ChannelPairConfig
 from lecturabot.controller import LecturaController
-from lecturabot.models import SessionState
+from lecturabot.models import ChannelMode, SessionState
 from lecturabot.service import Transition
 from lecturabot.views import QueueView
 
@@ -66,6 +66,37 @@ class _FakeService:
         self.set_queue_calls.append((text_channel_id, message_id))
         if self.fail_persistence:
             raise RuntimeError("database write failed")
+
+
+class _ShowQueueService(_FakeService):
+    def __init__(self, events: list[str], state: SessionState) -> None:
+        super().__init__(events)
+        self.state = state
+
+    async def get_or_create_session(self, **_: Any) -> SessionState:
+        self.events.append("get_session")
+        return self.state
+
+
+class _FakeInteractionResponse:
+    def __init__(self) -> None:
+        self.defer_calls: list[dict[str, Any]] = []
+
+    async def defer(self, **kwargs: Any) -> None:
+        self.defer_calls.append(kwargs)
+
+
+class _FakeInteraction:
+    guild_id = 1
+
+    def __init__(self, message: _FakeMessage) -> None:
+        self.response = _FakeInteractionResponse()
+        self.message = message
+        self.edit_calls: list[dict[str, Any]] = []
+
+    async def edit_original_response(self, **kwargs: Any) -> _FakeMessage:
+        self.edit_calls.append(kwargs)
+        return self.message
 
 
 def _controller(service: _FakeService) -> LecturaController:
@@ -150,6 +181,44 @@ async def test_repost_queue_persistence_failure_retires_only_new_panel() -> None
     assert new_message.edit_calls == [{"view": None}]
     assert channel.fetch_calls == []
     assert old_message.edit_calls == []
+
+
+@pytest.mark.asyncio
+async def test_show_queue_uses_public_interaction_response_for_fresh_panel() -> None:
+    events: list[str] = []
+    state = _state()
+    service = _ShowQueueService(events, state)
+    controller = _controller(service)
+    pair = ChannelPairConfig(
+        name="sandbox-1",
+        text_channel_id=101,
+        voice_channel_id=201,
+        mode=ChannelMode.STANDARD,
+    )
+    interaction = _FakeInteraction(_FakeMessage(222, "public", events))
+
+    controller._interaction_context = lambda _interaction: (  # type: ignore[method-assign]
+        pair,
+        object(),
+    )
+    controller._require_matching_voice = (  # type: ignore[method-assign]
+        lambda _member, _pair: None
+    )
+
+    async def retire(text_channel_id: int, message_id: int | None) -> None:
+        events.append(f"retire:{text_channel_id}:{message_id}")
+
+    controller._retire_message = retire  # type: ignore[method-assign]
+
+    await controller.show_queue(interaction)  # type: ignore[arg-type]
+
+    assert interaction.response.defer_calls == [{"thinking": True}]
+    assert len(interaction.edit_calls) == 1
+    assert interaction.edit_calls[0]["embed"] is not None
+    assert isinstance(interaction.edit_calls[0]["view"], QueueView)
+    assert interaction.edit_calls[0]["allowed_mentions"].everyone is False
+    assert service.set_queue_calls == [(101, 222)]
+    assert events == ["get_session", "persist", "retire:101:111"]
 
 
 @pytest.mark.asyncio
