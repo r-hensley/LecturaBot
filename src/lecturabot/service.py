@@ -369,6 +369,7 @@ class SessionService:
                 "La sesión comenzó. / The session started.",
                 activated_reader_id=state.current_user_id,
                 advanced=True,
+                repost_queue=True,
             )
 
     async def begin_catalog_reading(
@@ -615,6 +616,7 @@ class SessionService:
                 retired_picker_message_id=retired_picker,
                 retired_reading_message_id=retired_reading,
                 advanced=True,
+                repost_queue=True,
             )
 
     async def vote_to_skip(
@@ -676,6 +678,7 @@ class SessionService:
                 vote_count=required,
                 votes_required=required,
                 advanced=True,
+                repost_queue=True,
             )
 
     async def find_by_reading_message(

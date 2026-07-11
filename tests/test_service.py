@@ -109,6 +109,7 @@ async def test_start_gate_rotation_stats_and_restart_round_trip(
     assert started.state.current_user_id == 10
     assert started.state.queue == [10, 20]
     assert started.state.turn_started_at == 1_000
+    assert started.repost_queue is True
 
     await service.set_picker_message(
         text_channel_id=101,
@@ -142,6 +143,7 @@ async def test_start_gate_rotation_stats_and_restart_round_trip(
     )
 
     assert passed.advanced is True
+    assert passed.repost_queue is True
     assert passed.retired_reading_message_id == 600
     assert passed.state.queue == [10, 20]
     assert passed.state.current_user_id == 20
@@ -260,6 +262,7 @@ async def test_skip_votes_are_unique_and_reset_when_threshold_advances(
         source_message_id=500,
     )
     assert skipped.advanced is True
+    assert skipped.repost_queue is True
     assert (skipped.vote_count, skipped.votes_required) == (3, 3)
     assert skipped.state.current_user_id == 20
     assert skipped.state.skip_votes == set()

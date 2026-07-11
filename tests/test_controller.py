@@ -8,6 +8,7 @@ import pytest
 from lecturabot.config import BotConfig
 from lecturabot.controller import LecturaController
 from lecturabot.models import SessionState
+from lecturabot.service import Transition
 from lecturabot.views import QueueView
 
 
@@ -149,3 +150,50 @@ async def test_repost_queue_persistence_failure_retires_only_new_panel() -> None
     assert new_message.edit_calls == [{"view": None}]
     assert channel.fetch_calls == []
     assert old_message.edit_calls == []
+
+
+@pytest.mark.asyncio
+async def test_turn_transition_reposts_queue_before_sending_next_picker() -> None:
+    events: list[str] = []
+    service = _FakeService(events)
+    controller = _controller(service)
+    state = _state()
+
+    async def retire(_channel_id: int, message_id: int | None) -> None:
+        events.append(f"retire:{message_id}")
+
+    async def refresh(
+        refreshed_state: SessionState,
+        *,
+        repost: bool = False,
+    ) -> _FakeMessage:
+        assert refreshed_state is state
+        events.append(f"refresh:{repost}")
+        return _FakeMessage(222, "new", events)
+
+    async def send_picker(picker_state: SessionState) -> None:
+        assert picker_state is state
+        events.append("picker")
+
+    controller._retire_message = retire  # type: ignore[method-assign]
+    controller._refresh_queue = refresh  # type: ignore[method-assign]
+    controller._send_picker = send_picker  # type: ignore[method-assign]
+
+    await controller._apply_transition(
+        Transition(
+            state=state,
+            notice="Turn completed.",
+            activated_reader_id=20,
+            retired_picker_message_id=500,
+            retired_reading_message_id=600,
+            advanced=True,
+            repost_queue=True,
+        )
+    )
+
+    assert events == [
+        "retire:500",
+        "retire:600",
+        "refresh:True",
+        "picker",
+    ]
