@@ -1,11 +1,11 @@
 # LecturaBot Expected Embed Metadata and `discord.py` Templates
 
-**Status:** Discovery draft 0.1
-**Last updated:** 2026-07-10
+**Status:** Discovery draft 0.2
+**Last updated:** 2026-07-11
 **Target library:** `discord.py` 2.7.1, matching the configured local Python environment
 **Companion document:** [Expected operation and required features](EXPECTED_OPERATION.md)
 
-This document records the observable Discord message, embed, and component metadata exported from the reading channel. Sample user IDs, message IDs, timestamps, and session IDs are evidence values only; implementations must substitute live state or configuration.
+This document records the observable Discord message, embed, and component metadata exported from the reading channel. Sample user IDs, message IDs, timestamps, and session IDs are evidence values only; implementations must substitute live state or configuration. Sections labeled **Observed original-bot metadata** preserve the export contract; sections labeled **Clone enhancement** describe later requirements from live POC testing and must not be mistaken for captured original-bot evidence.
 
 The channel dump contains 20 messages. Six bot messages contain all observed embeds and components. They establish three core UI families:
 
@@ -41,9 +41,11 @@ The exported `type: "rich"` and `flags: 0` values are Discord payload metadata a
 
 Rows in the templates below are zero-indexed for the `row=` argument used by `discord.ui.Button`.
 
-## 2. Complete button contract
+## 2. Complete observed button contract
 
-Labels, ordering, capitalization, styles, and `custom_id` values in this table are exact observations.
+Labels, ordering, capitalization, styles, and `custom_id` values in this table
+are exact **observed original-bot metadata**. The clone-only additions are kept
+in a separate table below so the evidence is not rewritten retroactively.
 
 | View | Row | Order | Label | Style | `custom_id` |
 | --- | ---: | ---: | --- | --- | --- |
@@ -80,6 +82,26 @@ submit_reading{language_index}
 ```
 
 `pass_select` and `pass_reading` are intentionally distinct routes for abandoning the selection phase and ending an active reading.
+
+### 2.1 Clone-only component extensions
+
+These controls are required by the clone but were not present in the captured
+component export. **Pasar Turno / Pass Turn** remains in its observed location
+and is authorized only for the current reader. AFK voting uses a visibly and
+logically separate secondary button.
+
+| View | Row | Order | Label | Style | `custom_id` | Requirement source |
+| --- | ---: | ---: | --- | --- | --- | --- |
+| Queue | 0 | 4 | `Comenzar Lectura / Start Reading` | Primary | `start_reading` | Server guide; provisional POC addition |
+| Active reading | 0 | 3 | `Saltar turno ausente / Skip AFK Turn` | Secondary | `skip_afk_reading` | Live POC testing |
+| Text picker | 2 | 2 | `Saltar turno ausente / Skip AFK Turn` | Secondary | `skip_afk_select` | Live POC testing |
+
+The two AFK `custom_id` values are deliberately distinct because picker and
+reading controls are separately registered persistent views. Both route to the
+same domain action: record one vote from a queued, non-current reader. The
+third unique vote advances the turn; the threshold remains three even when
+fewer eligible voters are present. Duplicate votes, votes from the current
+reader, and votes from people outside the queue are rejected.
 
 ## 3. Queue/session panel
 
@@ -142,7 +164,48 @@ if text problem: ping <@{text_contact_user_id}>
 
 The dump contains several distinct queue-message IDs. It does not conclusively establish whether every state change creates a new message, whether `/queue` posts a fresh snapshot, or whether some queue messages are also edited in place.
 
-### 3.3 `discord.py` queue embed builder
+### 3.3 Clone enhancement: numbered fresh queue panels
+
+The clone rotates the *displayed* active queue into upcoming-turn order without
+changing the durable join order. The current reader is always display position
+`1`, the next reader is `2`, and numbering continues through the rotation.
+
+Numbered current-reader row:
+
+```md
+__**1. --> <@{current_user_id}> <--** | turns: *{turn_count_or_n/a}* | avg reading time: *{MM:SS_or_n/a}*__
+```
+
+Numbered upcoming-reader row:
+
+```md
+**{upcoming_position}.** <@{user_id}> | turns: *{turn_count_or_n/a}* | avg reading time: *{MM:SS_or_n/a}*
+```
+
+The member statistics are mandatory on every active row. After a normal
+completed reading, the completed-turn count and average are persisted before
+rendering the next panel, so that new panel immediately shows the updated
+values.
+
+The clone publishes a fresh queue message when:
+
+- the reading rotation starts;
+- the current reader passes normally;
+- three unique AFK votes force a skip; or
+- any queued participant leaves voluntarily or is removed after leaving the
+  paired voice channel.
+
+If the current reader leaves, the same publication follows advancement to the
+next reader when the session can continue, or reflects the paused state when it
+cannot. After the new panel is successfully published and registered as the
+active queue message, the superseded panel's view is retired so its controls
+cannot mutate live state.
+
+This numbered layout and publication lifecycle are **clone enhancements** from
+live testing. They do not change the unnumbered original-bot evidence template
+or prove how the original bot managed messages internally.
+
+### 3.4 Observed `discord.py` queue embed builder
 
 ```python
 from dataclasses import dataclass
@@ -354,7 +417,33 @@ Corrector-group template:
 
 Each stored correction entry occupies one bold line. The correction count should be supplied by the domain logic so the renderer does not prematurely choose between total-submission and de-duplicated counting rules while that behavior remains under investigation.
 
-### 5.3 `discord.py` reading and correction builders
+### 5.3 Clone enhancement: discarded cross-corrector duplicates
+
+The observed accepted-entry template remains bold. For the clone, when a
+different corrector later submits the same normalized correction, preserve the
+later attribution but render that entry with strikethrough only:
+
+```md
+<@{first_corrector_user_id}> suggests:
+**{accepted_correction}**
+
+<@{later_corrector_user_id}> suggests:
+~~{discarded_duplicate}~~
+```
+
+Normalization for duplicate comparison is case-insensitive and collapses
+surrounding or repeated whitespace. Store the discarded decision when the
+correction is submitted so grouping entries by corrector cannot destroy the
+chronological accepted/discarded decision. The correction title counts
+normalized suggestions once, and only accepted entries contribute a distinct
+highlight. Corrector-group rendering does not promise a single global display
+order across groups.
+
+This strikethrough treatment is a **clone enhancement**. The captured original
+summary retained duplicate attribution but did not establish discarded-entry
+markup.
+
+### 5.4 Observed `discord.py` reading and correction builders
 
 ```python
 from collections.abc import Iterable
@@ -402,7 +491,9 @@ The original output appears to interpolate correction text directly into Markdow
 
 ## 6. Reusable `discord.py` view template
 
-The following template creates the exact captured component layout while keeping callback routing outside the metadata definitions.
+The base tuples in the following template create the exact captured component
+layout while keeping callback routing outside the metadata definitions. The
+`CLONE_*` tuples append the separately identified clone extensions.
 
 ```python
 from collections.abc import Awaitable, Callable, Sequence
@@ -508,6 +599,35 @@ PICKER_BUTTONS = (
 )
 
 
+# These additions are requirements for the clone, not captured metadata.
+CLONE_QUEUE_BUTTONS = QUEUE_BUTTONS + (
+    ButtonSpec(
+        "Comenzar Lectura / Start Reading",
+        "start_reading",
+        discord.ButtonStyle.primary,
+        0,
+    ),
+)
+
+CLONE_READING_BUTTONS = READING_BUTTONS + (
+    ButtonSpec(
+        "Saltar turno ausente / Skip AFK Turn",
+        "skip_afk_reading",
+        discord.ButtonStyle.secondary,
+        0,
+    ),
+)
+
+CLONE_PICKER_BUTTONS = PICKER_BUTTONS + (
+    ButtonSpec(
+        "Saltar turno ausente / Skip AFK Turn",
+        "skip_afk_select",
+        discord.ButtonStyle.secondary,
+        2,
+    ),
+)
+
+
 class RoutedButton(discord.ui.Button["MetadataView"]):
     def __init__(self, spec: ButtonSpec, handler: ButtonHandler) -> None:
         super().__init__(
@@ -539,9 +659,9 @@ class MetadataView(discord.ui.View):
 Typical construction:
 
 ```python
-queue_view = MetadataView(QUEUE_BUTTONS, handle_queue_button)
-reading_view = MetadataView(READING_BUTTONS, handle_reading_button)
-picker_view = MetadataView(PICKER_BUTTONS, handle_picker_button)
+queue_view = MetadataView(CLONE_QUEUE_BUTTONS, handle_queue_button)
+reading_view = MetadataView(CLONE_READING_BUTTONS, handle_reading_button)
+picker_view = MetadataView(CLONE_PICKER_BUTTONS, handle_picker_button)
 ```
 
 If the controls must survive bot restarts, register fresh persistent view instances during startup with `bot.add_view(...)`. Persistence is an implementation recommendation based on the long-lived controls; the dump itself does not reveal the original view timeout or restart-registration behavior.
@@ -559,8 +679,16 @@ At minimum, routing should distinguish:
 - Correction submission: `submit_correction`
 - Passing before a text is selected: `pass_select`
 - Passing an active reading: `pass_reading`
+- AFK skip voting from the picker: `skip_afk_select`
+- AFK skip voting from an active reading: `skip_afk_reading`
 
-Likely checks include matching voice-channel membership, current-reader identity for picker and pass actions, active-session identity, stale-message protection, and duplicate-interaction protection. These checks come from the behavioral workflow, not from the embed payload.
+The clone must validate matching voice-channel membership, active-session and
+message identity, and current-reader identity for picker and pass actions.
+`pass_select` and `pass_reading` reject everyone except the current reader. The
+AFK routes reject the current reader, people outside the queue, and repeat
+voters; they advance only on the third unique eligible vote. Stale-message and
+duplicate-interaction protection is required for every state-changing route.
+These checks come from the behavioral workflow, not from the embed payload.
 
 ## 8. Metadata not present in this dump
 
@@ -575,7 +703,8 @@ Do not invent these details until later evidence is supplied:
 - Empty correction-summary behavior
 - Whether completed reading controls are removed, disabled, or left active
 - View timeout and restart behavior in the original bot
-- Exact message edit-versus-new-message lifecycle
+- Exact message edit-versus-new-message lifecycle in the original bot. The
+  clone's fresh-panel lifecycle is specified in section 3.3.
 - Permission and authorization failure copy
 
 ## 9. Implementation fidelity checklist
@@ -583,13 +712,22 @@ Do not invent these details until later evidence is supplied:
 - [ ] Keep reading text in message content and corrections in the embed.
 - [ ] Ping the current reader in picker message content.
 - [ ] Leave all observed embeds colorless.
-- [ ] Preserve exact button labels, capitalization, styles, rows, and `custom_id` values.
+- [ ] Preserve every observed button's exact label, capitalization, style,
+      row, and `custom_id`; append clone-only controls according to section 2.1.
 - [ ] Do not route on exported numeric component IDs.
 - [ ] Use Discord mention and relative-timestamp syntax.
 - [ ] Omit the queue footer and turn-start line when the queue is empty.
 - [ ] Use a queue footer of `id: {session_id}` for active sessions.
-- [ ] Preserve bold correction entries and blank lines between correctors.
+- [ ] Preserve bold accepted correction entries and blank lines between
+      correctors; render later cross-corrector duplicates as `~~struck through~~`.
 - [ ] Preserve original source casing when applying underline-plus-bold highlights.
+- [ ] Number active rows in upcoming-turn order: current reader `1`, next
+      reader `2`, then the remainder of the rotation.
+- [ ] Show `turns` and `avg reading time` on every active member row and render
+      completed-reading updates in the next fresh panel.
+- [ ] Publish a fresh queue panel after every queue departure and turn change,
+      then retire the superseded panel's controls.
+- [ ] Allow only the current reader to pass; require three unique queued,
+      non-current votes through the separate AFK control to force a skip.
 - [ ] Validate message and embed lengths before sending catalog or custom text.
 - [ ] Reject stale or unauthorized component interactions in callbacks.
-

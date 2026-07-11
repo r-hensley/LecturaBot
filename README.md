@@ -21,9 +21,10 @@ The implementation follows the observed behavior in [EXPECTED_OPERATION.md](EXPE
 - Custom-text modal, including a language label in the Other Languages channel
 - Correction modal and reply-to-reading correction capture
 - Case-insensitive, all-occurrence highlights that preserve the source casing
-- Grouped correction attribution and exact-string correction counts
-- Current-reader pass and non-current AFK skip voting
+- Grouped correction attribution, with later cross-corrector duplicates struck through
+- Current-reader-only pass and a separate, fixed three-vote AFK skip action
 - Guild/user completed-turn totals and average reading time
+- Numbered queue panels in upcoming-turn order, republished after departures and turn changes
 - SQLite-backed catalog, statistics, and versioned active-session snapshots
 - Startup reconciliation of voice membership and persisted Discord controls
 - Per-room serialization across state changes and Discord message publication
@@ -32,11 +33,11 @@ The implementation follows the observed behavior in [EXPECTED_OPERATION.md](EXPE
 ## POC decisions where the source behavior is unresolved
 
 - The server guide confirms a **Start Reading** action, but it was absent from the captured queue component dump. This POC appends a provisional `Comenzar Lectura / Start Reading` button with `custom_id="start_reading"` while leaving all observed controls unchanged.
-- `/lecturatest` maintains one canonical queue panel per channel pair and edits it after mutations instead of intentionally posting a new queue message every time. The planned final command names remain `/queue` and `/cola` after the original bot is retired.
+- `/lecturatest` maintains one active queue panel per channel pair. Queue departures and turn changes publish a fresh numbered panel so the current order and updated statistics remain visible; superseded panels are retired. The planned final command names remain `/queue` and `/cola` after the original bot is retired.
 - A session pauses when fewer than two queued voice participants remain. It must be started again after the second participant returns.
 - Reading time runs from publication of the reading text until a normal current-reader pass. Selection time, skipped turns, and disconnected turns do not affect statistics.
-- The configured skip-vote threshold defaults to two in code and is reduced to the number of eligible non-current queued readers.
-- Correction counts de-duplicate exact trimmed strings. Attribution groups still retain each corrector's submitted entry.
+- **Pasar turno / Pass Turn** is available only to the current reader. A separate **Saltar turno ausente / Skip AFK Turn** action requires three unique votes from queued, non-current readers; the threshold is never reduced when fewer voters are available.
+- Correction counts de-duplicate normalized correction text. Attribution groups retain each corrector's submitted entry, but a later duplicate from another corrector is rendered as `~~struck through~~` to show that it was discarded.
 - Native-language correction eligibility remains a community rule; the POC does not yet enforce language roles.
 - Correctors do not need to enter the reader queue, but they must be present in the matching voice channel.
 - Queue panels are capped at 25 participants. A reading stores at most 20 correction entries and 1,400 raw correction characters so Discord's message/embed limits cannot strand an active turn.

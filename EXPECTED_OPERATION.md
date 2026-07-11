@@ -1,7 +1,7 @@
 # LecturaBot Expected Operation and Required Features
 
-**Status:** Discovery draft 0.4
-**Last updated:** 2026-07-10
+**Status:** Discovery draft 0.5
+**Last updated:** 2026-07-11
 **Project basis:** Authorized behavioral reimplementation of a closed-source bot, with the original bot owner's permission.
 
 This is a living specification assembled from user explanations, copied channel output, screenshots, and later clarifications. It describes expected behavior, not a chosen technical design. When the evidence is incomplete, the uncertainty is recorded rather than silently converted into a requirement.
@@ -14,6 +14,9 @@ The exact Discord embed, message-content, and button contract is documented sepa
 - **Observed:** Visible in one or more channel examples, but the intended rule may still need confirmation.
 - **Inferred:** Strongly suggested by the examples, but not yet demonstrated directly.
 - **Open:** Not enough information yet.
+- **Clone requirement:** Behavior requested for the authorized reimplementation
+  after live POC testing. It may deliberately extend behavior that was absent
+  or inconclusive in the original-bot evidence.
 
 ## 1. Purpose
 
@@ -58,8 +61,14 @@ The supplied instructions ask people to correct only readers who are reading in 
 13. The reader goes through all corrections.
 14. The reader presses the red **Pass Turn** button to finish.
 15. The bot records the completed turn, updates timing statistics, and activates the next eligible reader.
+16. The bot publishes a fresh, numbered queue panel for the new turn so the
+    rotation and updated statistics remain visible.
 
 If nobody remains, the queue displays **Vacío / Empty**.
+
+The POC temporarily exposes this workflow through `/lecturatest` so it can run
+beside the original bot without colliding with `/queue` or `/cola`. The latter
+remain the planned final command names after the original bot is retired.
 
 ## 4. Queue and voice-channel behavior
 
@@ -104,21 +113,54 @@ Observed behavior includes:
 - A stable numeric ID is displayed throughout the sampled session.
 - The status includes separately configurable contacts for bot bugs and text problems.
 
-### Queue behavior still to confirm
+### Clone requirements from live POC testing
+
+- **Pass Turn authorization:** **Pasar turno / Pass Turn** is a current-reader
+  action only. A waiting reader must not be allowed to advance the turn with
+  that control.
+- **Separate AFK voting:** Text-picker and active-reading messages provide a
+  separate bilingual **Saltar turno ausente / Skip AFK Turn** action. Only a
+  queued participant other than the current reader may vote. Three unique
+  votes are required, duplicate votes do not count, and the threshold is never
+  reduced because fewer eligible voters are present.
+- **Queue departures:** Every voluntary queue departure or automatic removal
+  after leaving the paired voice channel publishes a fresh queue panel. If the
+  departing participant is the current reader, the turn advances to the next
+  reader when the minimum-participant rule permits; otherwise the session
+  pauses in its documented waiting state.
+- **Turn transitions:** Starting the rotation, a normal current-reader pass,
+  and a successful AFK skip all publish a fresh queue panel for the new turn.
+  The superseded panel must no longer accept state-changing interactions.
+- **Upcoming-turn positions:** An active queue is displayed in rotation order,
+  beginning with the current reader as position `1`; position `2` is the next
+  reader, followed by the remaining upcoming readers. This numbering is a
+  clone enhancement and was not present in the captured original-bot panel.
+- **Visible statistics:** Every numbered member row includes `turns` and
+  `avg reading time`. A normal completed reading updates those values before
+  the next turn's fresh queue panel is published.
+
+### Original-bot queue behavior still to confirm
 
 - Whether the rotation is strictly FIFO, round-robin, or has exceptions.
 - Where a newly joined or rejoined user is inserted.
 - Whether the bot technically rejects `/queue`, `/cola`, or **Unirse / Enter** when the user is not in the matching voice channel; the documented user flow requires joining voice first.
-- What happens when the current reader voluntarily leaves the queue or voice channel.
-- Whether the status is one edited message or a new status message on every transition.
+- What the original bot did when the current reader voluntarily left the queue
+  or voice channel. The clone behavior is specified above.
+- Whether the original status was one edited message or a new status message
+  on every transition. The clone must publish fresh panels as specified above.
 - Whether `/queue` creates a new session, retrieves a persistent channel-specific session, or only posts the controls for existing state.
 - How a session is closed and when an abandoned or empty session expires.
 - Whether all six channel pairs can run sessions simultaneously. The channel layout implies that their state must at least be isolated from one another.
 - What happens if **Start Reading** is pressed with fewer than two eligible participants.
 - Whether every participant must press **Start Reading**, only one participant starts the session, or the control means something turn-specific.
-- The exact vote threshold and whether it changes with queue size.
-- Who is eligible to vote, how duplicate votes are prevented, and when votes reset.
-- The exact control name for skipping another reader. The Spanish instructions refer to **Pasar turno**, while the English instructions refer to **Skip Turn**.
+- The original bot's exact vote threshold and whether it changed with queue
+  size. The clone uses a fixed threshold of three unique votes.
+- The original bot's voter eligibility and vote-reset rules. The clone's voter
+  eligibility is specified above; clone votes reset with the turn.
+- The original control name for skipping another reader. The Spanish
+  instructions refer to **Pasar turno**, while the English instructions refer
+  to **Skip Turn**; the clone uses the distinct bilingual label **Saltar turno
+  ausente / Skip AFK Turn**.
 
 ## 5. Text selection and delivery
 
@@ -242,6 +284,23 @@ Observed behavior includes:
 - The displayed total appears to count unique correction strings across correctors. Identical entries such as `serious` contribute once to the total even when shown under two correctors. Small textual differences, including spelling or punctuation, appear capable of producing separate entries. This counting rule is inferred from the examples and needs direct confirmation.
 - Free-form pronunciation explanations and phonetic approximations also appear as ordinary human chat messages after the bot summary. There is no evidence yet that the bot parses or stores those follow-up messages.
 
+### Clone requirement for duplicate corrections
+
+The first normalized occurrence of a correction remains accepted. If a
+different corrector later submits the same normalized word or phrase, the
+later entry remains visible under that corrector for attribution and review,
+but is marked discarded with Discord strikethrough syntax:
+
+```md
+<@{later_corrector_user_id}> suggests:
+~~{duplicate_correction}~~
+```
+
+The discarded duplicate does not add another unique correction to the displayed
+count and does not create an additional text highlight. This strikethrough is a
+clone enhancement requested after live testing, not metadata observed in the
+original channel export.
+
 ### Correction behavior still to confirm
 
 - What the **Add Corrections** button opens and what input format it accepts.
@@ -267,6 +326,16 @@ Observed behavior includes:
 - When a reader finishes, their turn count increases and their average changes.
 - The status includes a relative `Current turn started` time.
 
+### Clone requirements from live POC testing
+
+- Completed-turn totals and average reading time are always included on active
+  numbered queue rows, including `n/a` for users without a completed reading.
+- A normally completed reading is recorded before the next turn's fresh queue
+  panel is rendered, so the just-finished reader's `turns` and
+  `avg reading time` values are immediately visible there.
+- AFK skips, voice/queue departures, and turns passed before a reading is
+  published do not count as completed readings.
+
 ### Timing behavior still to confirm
 
 - Whether `turns` and `avg reading time` are scoped to the current session, server, user lifetime, language, or some combination.
@@ -282,7 +351,7 @@ Observed behavior includes:
 - `/queue` and `/cola` are the documented English and Spanish command forms.
 - Queue headings, empty state, instructions, and correction headings are bilingual.
 - Reading headings are localized to the language being practiced.
-- Important buttons have localized labels, including **Start Reading** / **Comenzar Lectura**, **Pass Turn** / **Pasar Turno**, and **Your Own Text** / **Mi propio texto**.
+- Important buttons have localized labels, including **Start Reading** / **Comenzar Lectura**, **Pass Turn** / **Pasar Turno**, **Saltar turno ausente / Skip AFK Turn**, and **Your Own Text** / **Mi propio texto**.
 - The pass-turn control is described as red.
 - User mentions must use Discord mentions so readers receive a notification.
 - User display names may contain spaces, Unicode characters, and decorative characters.
@@ -330,6 +399,7 @@ This is a behavioral inventory, not a database-schema decision.
 - Session ID
 - Minimum participant count
 - Queue membership and order
+- Upcoming-turn position, rendered with the current reader as `1`
 - Current reader
 - Current-turn state and timestamps
 - Skip votes
@@ -363,6 +433,7 @@ This is a behavioral inventory, not a database-schema decision.
 - Correction text
 - Corrector identity
 - Submission order
+- Accepted or discarded-duplicate status
 - Link to the active reading
 - Submission path: correction button or message reply
 - Highlight or match information, if needed
@@ -376,16 +447,23 @@ The reimplementation is presently expected to need:
 - Configurable, isolated voice/text channel pairs, including the six documented standard pairs and the separate other-language pair.
 - A queue tied to matching voice-channel presence.
 - A two-participant minimum and **Start Reading** action.
-- Enter, leave, red pass-turn, and vote-to-skip actions.
+- Enter and leave actions, a red current-reader-only pass action, and a
+  separate bilingual AFK-skip action requiring three unique queued,
+  non-current votes.
 - Automatic removal when a queued user leaves voice.
-- Current-reader mentions and queue-status updates.
+- Current-reader mentions and fresh queue panels after departures and turn
+  changes.
+- Numbered active queues in upcoming-turn order, with the current reader at
+  position `1` and the next reader at position `2`.
 - A Spanish-English text catalog with difficulty selection.
 - A current-reader text picker.
 - A custom-text submission path, including for languages outside English and Spanish.
 - Reading-post rendering with optional metadata.
 - **Add Corrections** and reply-associated correction capture.
-- Correction attribution, aggregation, counting, and text highlighting.
-- Completed-turn and average-time tracking.
+- Correction attribution, aggregation, counting, text highlighting, and
+  strikethrough rendering of later cross-corrector duplicates.
+- Visible completed-turn and average-time tracking, updated before the next
+  turn panel is published.
 - An empty-queue state.
 - Configurable bot-bug and content-problem contacts.
 - Safe handling of Unicode names and bilingual text.
@@ -444,3 +522,19 @@ The most useful future examples would show:
 - Confirmed Beginner, Intermediate, and Advanced catalog choices for both Spanish and English, plus language-specific custom-text actions.
 - Confirmed that reading text is ordinary message content while correction aggregation is rendered in an attached embed.
 - Detailed templates and `discord.py` mappings are maintained in the companion embed-metadata document.
+
+### Batch 6: Live POC testing feedback
+
+- Required a fresh queue panel after every queue departure and every turn
+  transition, including automatic advancement when the current reader leaves.
+- Required active queues to be numbered in upcoming-turn order, with the
+  current reader as `1`, while retaining completed-turn and average-time data
+  on every row.
+- Clarified that **Pass Turn** is reserved for the current reader and introduced
+  a distinct bilingual **Skip AFK Turn** control with a fixed threshold of
+  three unique queued, non-current voters.
+- Required a later correction duplicated by another corrector to remain
+  attributed but render as `~~struck through~~` to indicate that it was
+  discarded.
+- Confirmed that newly completed reading statistics must be visible on the
+  fresh panel published for the next turn.
