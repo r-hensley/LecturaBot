@@ -224,7 +224,12 @@ def build_instructions_embed() -> discord.Embed:
             "When it is your turn, choose a text or provide your own.\n"
             "4. Los demás pueden enviar correcciones mientras escuchan. / "
             "Others can submit corrections while listening.\n"
-            "5. Pulsa **Pasar turno / Pass Turn** después de revisar las "
-            "correcciones. / Pass after reviewing the corrections."
+            "5. Solo el lector actual puede pulsar **Pasar turno / Pass "
+            "Turn** después de revisar las correcciones. / Only the current "
+            "reader can pass after reviewing the corrections.\n"
+            "6. Si el lector está ausente, tres participantes distintos en "
+            "la cola pueden pulsar **Saltar turno ausente / Skip AFK Turn**. "
+            "/ If the reader is AFK, three different queued participants can "
+            "press **Skip AFK Turn**."
         ),
     )

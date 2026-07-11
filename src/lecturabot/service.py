@@ -88,7 +88,7 @@ class SessionService:
         *,
         minimum_participants: int = 2,
         maximum_participants: int = 25,
-        skip_vote_threshold: int = 2,
+        skip_vote_threshold: int = 3,
         maximum_correction_entries: int = 20,
         maximum_correction_characters: int = 1_400,
         clock: Callable[[], int] | None = None,
@@ -304,7 +304,6 @@ class SessionService:
 
             activated_reader_id: int | None = None
             advanced = False
-            skip_triggered = False
             fell_below_minimum = len(state.queue) < self.minimum_participants
             if fell_below_minimum:
                 self._set_waiting(state)
@@ -321,25 +320,6 @@ class SessionService:
             ):
                 state.current_index -= 1
 
-            if (
-                not fell_below_minimum
-                and not was_current
-                and state.current_user_id is not None
-                and state.skip_votes
-            ):
-                required = min(
-                    self.skip_vote_threshold,
-                    max(1, len(state.queue) - 1),
-                )
-                if len(state.skip_votes) >= required:
-                    # A departure can lower the threshold. Honor votes already
-                    # cast so the final eligible voter is not left stuck with
-                    # an "already voted" response.
-                    self._advance(state)
-                    activated_reader_id = state.current_user_id
-                    advanced = True
-                    skip_triggered = True
-
             await self._persist_locked(state)
             return Transition(
                 self._snapshot(state),
@@ -347,12 +327,12 @@ class SessionService:
                 activated_reader_id=activated_reader_id,
                 retired_picker_message_id=(
                     retired_picker
-                    if was_current or fell_below_minimum or skip_triggered
+                    if was_current or fell_below_minimum
                     else None
                 ),
                 retired_reading_message_id=(
                     retired_reading
-                    if was_current or fell_below_minimum or skip_triggered
+                    if was_current or fell_below_minimum
                     else None
                 ),
                 advanced=advanced,
@@ -598,79 +578,20 @@ class SessionService:
                 "Correcciones guardadas. / Corrections saved.",
             )
 
-    async def pass_or_vote(
+    async def pass_turn(
         self,
         *,
         text_channel_id: int,
         actor_id: int,
         source_message_id: int,
     ) -> Transition:
+        """Complete the active turn; only the current reader may do this."""
         async with self._lock_for(text_channel_id):
             state = self._snapshot(
                 self._require_state(await self._load_locked(text_channel_id))
             )
-            if state.phase not in (SessionPhase.SELECTING, SessionPhase.READING):
-                raise self._wrong_phase("selecting or reading")
-            expected_message_id = (
-                state.picker_message_id
-                if state.phase is SessionPhase.SELECTING
-                else (
-                    None
-                    if state.active_reading is None
-                    else state.active_reading.message_id
-                )
-            )
-            if expected_message_id != source_message_id:
-                raise SessionError(
-                    "stale_turn",
-                    "Ese turno ya no está activo. / That turn is no longer active.",
-                )
-
-            current_user_id = state.current_user_id
-            if current_user_id is None:
-                raise self._wrong_phase("active turn")
-
-            if actor_id != current_user_id:
-                if actor_id not in state.members:
-                    raise SessionError(
-                        "not_queued",
-                        "Solo participantes en cola pueden votar. / "
-                        "Only queued participants can vote.",
-                    )
-                if actor_id in state.skip_votes:
-                    raise SessionError(
-                        "already_voted",
-                        "Ya votaste para saltar este turno. / "
-                        "You already voted to skip this turn.",
-                    )
-                state.skip_votes.add(actor_id)
-                required = min(
-                    self.skip_vote_threshold,
-                    max(1, len(state.queue) - 1),
-                )
-                if len(state.skip_votes) < required:
-                    await self._persist_locked(state)
-                    return Transition(
-                        self._snapshot(state),
-                        f"Voto registrado ({len(state.skip_votes)}/{required}). / "
-                        f"Vote recorded ({len(state.skip_votes)}/{required}).",
-                        vote_count=len(state.skip_votes),
-                        votes_required=required,
-                    )
-
-                retired_picker, retired_reading = self._active_message_ids(state)
-                self._advance(state)
-                await self._persist_locked(state)
-                return Transition(
-                    self._snapshot(state),
-                    "Se saltó el turno. / The turn was skipped.",
-                    activated_reader_id=state.current_user_id,
-                    retired_picker_message_id=retired_picker,
-                    retired_reading_message_id=retired_reading,
-                    vote_count=required,
-                    votes_required=required,
-                    advanced=True,
-                )
+            self._require_active_source(state, source_message_id)
+            self._require_current_reader(state, actor_id)
 
             retired_picker, retired_reading = self._active_message_ids(state)
             completed_reading = state.active_reading
@@ -691,6 +612,67 @@ class SessionService:
                 activated_reader_id=state.current_user_id,
                 retired_picker_message_id=retired_picker,
                 retired_reading_message_id=retired_reading,
+                advanced=True,
+            )
+
+    async def vote_to_skip(
+        self,
+        *,
+        text_channel_id: int,
+        voter_id: int,
+        source_message_id: int,
+    ) -> Transition:
+        """Record one queued participant's vote to skip an AFK reader."""
+        async with self._lock_for(text_channel_id):
+            state = self._snapshot(
+                self._require_state(await self._load_locked(text_channel_id))
+            )
+            self._require_active_source(state, source_message_id)
+            current_user_id = state.current_user_id
+            if current_user_id is None:
+                raise self._wrong_phase("active turn")
+            if voter_id == current_user_id:
+                raise SessionError(
+                    "current_reader_skip_vote",
+                    "Usa Pasar turno para terminar tu propio turno. / "
+                    "Use Pass Turn to finish your own turn.",
+                )
+            if voter_id not in state.members:
+                raise SessionError(
+                    "not_queued",
+                    "Solo participantes en cola pueden votar. / "
+                    "Only queued participants can vote.",
+                )
+            if voter_id in state.skip_votes:
+                raise SessionError(
+                    "already_voted",
+                    "Ya votaste para saltar este turno. / "
+                    "You already voted to skip this turn.",
+                )
+
+            state.skip_votes.add(voter_id)
+            required = self.skip_vote_threshold
+            if len(state.skip_votes) < required:
+                await self._persist_locked(state)
+                return Transition(
+                    self._snapshot(state),
+                    f"Voto registrado ({len(state.skip_votes)}/{required}). / "
+                    f"Vote recorded ({len(state.skip_votes)}/{required}).",
+                    vote_count=len(state.skip_votes),
+                    votes_required=required,
+                )
+
+            retired_picker, retired_reading = self._active_message_ids(state)
+            self._advance(state)
+            await self._persist_locked(state)
+            return Transition(
+                self._snapshot(state),
+                "Se saltó el turno ausente. / The AFK turn was skipped.",
+                activated_reader_id=state.current_user_id,
+                retired_picker_message_id=retired_picker,
+                retired_reading_message_id=retired_reading,
+                vote_count=required,
+                votes_required=required,
                 advanced=True,
             )
 
@@ -716,6 +698,29 @@ class SessionService:
                 "Usa /lecturatest primero. / Use /lecturatest first.",
             )
         return state
+
+    def _require_active_source(
+        self,
+        state: SessionState,
+        source_message_id: int,
+    ) -> None:
+        """Reject buttons belonging to an older picker or reading message."""
+        if state.phase not in (SessionPhase.SELECTING, SessionPhase.READING):
+            raise self._wrong_phase("selecting or reading")
+        expected_message_id = (
+            state.picker_message_id
+            if state.phase is SessionPhase.SELECTING
+            else (
+                None
+                if state.active_reading is None
+                else state.active_reading.message_id
+            )
+        )
+        if expected_message_id != source_message_id:
+            raise SessionError(
+                "stale_turn",
+                "Ese turno ya no está activo. / That turn is no longer active.",
+            )
 
     @staticmethod
     def _require_current_reader(state: SessionState, user_id: int) -> None:

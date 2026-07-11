@@ -213,11 +213,23 @@ async def test_persistent_views_match_button_contract() -> None:
             1,
         ),
         ("Pasar Turno / Pass Turn", "pass_select", 4, 2),
+        (
+            "Saltar turno ausente / Skip AFK Turn",
+            "skip_afk_select",
+            2,
+            2,
+        ),
     ]
     assert reading.timeout is None
     assert _button_contract(reading) == [
         ("Poner Correcciones / Submit Corrections", "submit_correction", 3, 0),
         ("Pasar turno / Pass Turn", "pass_reading", 4, 0),
+        (
+            "Saltar turno ausente / Skip AFK Turn",
+            "skip_afk_reading",
+            2,
+            0,
+        ),
     ]
 
 

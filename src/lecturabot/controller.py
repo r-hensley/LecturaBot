@@ -384,9 +384,31 @@ class LecturaController:
                 raise self._stale_turn()
             await interaction.response.defer()
             async with self._ui_lock_for(pair.text_channel_id):
-                transition = await self.service.pass_or_vote(
+                transition = await self.service.pass_turn(
                     text_channel_id=pair.text_channel_id,
                     actor_id=member.id,
+                    source_message_id=interaction.message.id,
+                )
+                await self._apply_transition(transition)
+            await interaction.followup.send(transition.notice, ephemeral=True)
+        except SessionError as error:
+            await self._send_error(interaction, error.user_message)
+        except Exception:
+            LOGGER.exception("pass-turn action failed")
+            await self._send_error(interaction, self._generic_error())
+
+    async def handle_skip_vote(self, interaction: discord.Interaction) -> None:
+        """Record a fixed-threshold AFK-skip vote from a queued listener."""
+        try:
+            pair, member = self._interaction_context(interaction)
+            self._require_matching_voice(member, pair)
+            if interaction.message is None:
+                raise self._stale_turn()
+            await interaction.response.defer()
+            async with self._ui_lock_for(pair.text_channel_id):
+                transition = await self.service.vote_to_skip(
+                    text_channel_id=pair.text_channel_id,
+                    voter_id=member.id,
                     source_message_id=interaction.message.id,
                 )
                 if transition.advanced:
@@ -395,7 +417,7 @@ class LecturaController:
         except SessionError as error:
             await self._send_error(interaction, error.user_message)
         except Exception:
-            LOGGER.exception("pass/skip action failed")
+            LOGGER.exception("skip-AFK vote failed")
             await self._send_error(interaction, self._generic_error())
 
     async def handle_reply(self, message: discord.Message) -> None:

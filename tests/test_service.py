@@ -135,7 +135,7 @@ async def test_start_gate_rotation_stats_and_restart_round_trip(
     )
     assert published.picker_message_id is None
     clock.value = 1_135
-    passed = await service.pass_or_vote(
+    passed = await service.pass_turn(
         text_channel_id=101,
         actor_id=10,
         source_message_id=600,
@@ -196,7 +196,7 @@ async def test_skip_votes_are_unique_and_reset_when_threshold_advances(
     tmp_path: Path,
 ) -> None:
     service, repository, _ = await _make_service(tmp_path)
-    await _join(service, 10, 20, 30)
+    await _join(service, 10, 20, 30, 40)
     await service.start(text_channel_id=101, actor_id=10)
     await service.set_picker_message(
         text_channel_id=101,
@@ -205,36 +205,62 @@ async def test_skip_votes_are_unique_and_reset_when_threshold_advances(
     )
 
     with pytest.raises(SessionError) as stale:
-        await service.pass_or_vote(
+        await service.vote_to_skip(
             text_channel_id=101,
-            actor_id=20,
+            voter_id=20,
             source_message_id=999,
         )
     _assert_error(stale, "stale_turn")
 
-    first = await service.pass_or_vote(
-        text_channel_id=101,
-        actor_id=20,
-        source_message_id=500,
-    )
-    assert first.advanced is False
-    assert (first.vote_count, first.votes_required) == (1, 2)
-    assert first.state.skip_votes == {20}
-
-    with pytest.raises(SessionError) as duplicate:
-        await service.pass_or_vote(
+    with pytest.raises(SessionError) as non_reader_pass:
+        await service.pass_turn(
             text_channel_id=101,
             actor_id=20,
             source_message_id=500,
         )
+    _assert_error(non_reader_pass, "not_current_reader")
+
+    with pytest.raises(SessionError) as reader_vote:
+        await service.vote_to_skip(
+            text_channel_id=101,
+            voter_id=10,
+            source_message_id=500,
+        )
+    _assert_error(reader_vote, "current_reader_skip_vote")
+
+    first = await service.vote_to_skip(
+        text_channel_id=101,
+        voter_id=20,
+        source_message_id=500,
+    )
+    assert first.advanced is False
+    assert (first.vote_count, first.votes_required) == (1, 3)
+    assert first.state.skip_votes == {20}
+
+    with pytest.raises(SessionError) as duplicate:
+        await service.vote_to_skip(
+            text_channel_id=101,
+            voter_id=20,
+            source_message_id=500,
+        )
     _assert_error(duplicate, "already_voted")
 
-    skipped = await service.pass_or_vote(
+    second = await service.vote_to_skip(
         text_channel_id=101,
-        actor_id=30,
+        voter_id=30,
+        source_message_id=500,
+    )
+    assert second.advanced is False
+    assert (second.vote_count, second.votes_required) == (2, 3)
+    assert second.state.skip_votes == {20, 30}
+
+    skipped = await service.vote_to_skip(
+        text_channel_id=101,
+        voter_id=40,
         source_message_id=500,
     )
     assert skipped.advanced is True
+    assert (skipped.vote_count, skipped.votes_required) == (3, 3)
     assert skipped.state.current_user_id == 20
     assert skipped.state.skip_votes == set()
     assert skipped.retired_picker_message_id == 500
@@ -242,30 +268,44 @@ async def test_skip_votes_are_unique_and_reset_when_threshold_advances(
 
 
 @pytest.mark.asyncio
-async def test_departure_honors_votes_when_skip_threshold_drops(
+async def test_departure_removes_vote_without_lowering_fixed_threshold(
     tmp_path: Path,
 ) -> None:
     service, _, _ = await _make_service(tmp_path)
-    await _join(service, 10, 20, 30)
+    await _join(service, 10, 20, 30, 40)
     await service.start(text_channel_id=101, actor_id=10)
     await service.set_picker_message(
         text_channel_id=101,
         reader_id=10,
         message_id=500,
     )
-    vote = await service.pass_or_vote(
+    first_vote = await service.vote_to_skip(
         text_channel_id=101,
-        actor_id=20,
+        voter_id=20,
         source_message_id=500,
     )
-    assert vote.advanced is False
+    second_vote = await service.vote_to_skip(
+        text_channel_id=101,
+        voter_id=30,
+        source_message_id=500,
+    )
+    assert first_vote.advanced is False
+    assert second_vote.advanced is False
 
     departure = await service.leave(text_channel_id=101, user_id=30)
 
-    assert departure.advanced is True
-    assert departure.state.current_user_id == 20
-    assert departure.state.skip_votes == set()
-    assert departure.retired_picker_message_id == 500
+    assert departure.advanced is False
+    assert departure.state.current_user_id == 10
+    assert departure.state.skip_votes == {20}
+    assert departure.retired_picker_message_id is None
+
+    still_short = await service.vote_to_skip(
+        text_channel_id=101,
+        voter_id=40,
+        source_message_id=500,
+    )
+    assert still_short.advanced is False
+    assert (still_short.vote_count, still_short.votes_required) == (2, 3)
 
 
 @pytest.mark.asyncio
@@ -289,6 +329,7 @@ async def test_leaving_current_advances_and_rejoining_uses_queue_tail(
 
     await _join(service, 10)
     removed_waiter = await service.leave(text_channel_id=101, user_id=30)
+    assert removed_waiter.advanced is False
     assert removed_waiter.state.queue == [20, 10]
     assert removed_waiter.state.current_user_id == 20
 
@@ -298,6 +339,7 @@ async def test_leaving_current_advances_and_rejoining_uses_queue_tail(
         message_id=501,
     )
     below_minimum = await service.leave(text_channel_id=101, user_id=20)
+    assert below_minimum.advanced is False
     assert below_minimum.state.queue == [10]
     assert below_minimum.state.phase is SessionPhase.WAITING
     assert below_minimum.state.current_user_id is None
@@ -318,7 +360,7 @@ async def test_current_reader_leaving_final_slot_wraps_to_first_member(
             reader_id=reader_id,
             message_id=picker_id,
         )
-        await service.pass_or_vote(
+        await service.pass_turn(
             text_channel_id=101,
             actor_id=reader_id,
             source_message_id=picker_id,
@@ -564,7 +606,7 @@ async def test_corrections_preserve_sources_and_reject_stale_ids(
     assert await service.find_by_reading_message(701) is None
 
     with pytest.raises(SessionError) as stale_turn:
-        await service.pass_or_vote(
+        await service.pass_turn(
             text_channel_id=101,
             actor_id=10,
             source_message_id=701,

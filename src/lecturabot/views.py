@@ -73,7 +73,7 @@ class QueueView(discord.ui.View):
 
 
 class TextPickerView(discord.ui.View):
-    """Exact three-row Spanish/English text picker captured from the bot."""
+    """Three-row bilingual picker plus the clone's separate AFK action."""
 
     def __init__(self, controller: LecturaController) -> None:
         super().__init__(timeout=None)
@@ -214,6 +214,19 @@ class TextPickerView(discord.ui.View):
     ) -> None:
         await self.controller.handle_pass(interaction)
 
+    @discord.ui.button(
+        label="Saltar turno ausente / Skip AFK Turn",
+        style=discord.ButtonStyle.secondary,
+        custom_id="skip_afk_select",
+        row=2,
+    )
+    async def skip_afk_selection(
+        self,
+        interaction: discord.Interaction,
+        _: discord.ui.Button[TextPickerView],
+    ) -> None:
+        await self.controller.handle_skip_vote(interaction)
+
 
 class ReadingView(discord.ui.View):
     """Controls attached to an active reading and correction summary."""
@@ -247,6 +260,19 @@ class ReadingView(discord.ui.View):
         _: discord.ui.Button[ReadingView],
     ) -> None:
         await self.controller.handle_pass(interaction)
+
+    @discord.ui.button(
+        label="Saltar turno ausente / Skip AFK Turn",
+        style=discord.ButtonStyle.secondary,
+        custom_id="skip_afk_reading",
+        row=0,
+    )
+    async def skip_afk_reading(
+        self,
+        interaction: discord.Interaction,
+        _: discord.ui.Button[ReadingView],
+    ) -> None:
+        await self.controller.handle_skip_vote(interaction)
 
 
 class CustomTextModal(discord.ui.Modal):
