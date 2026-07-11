@@ -40,8 +40,8 @@ class BotConfig:
 
     token: str = field(repr=False)
     guild_id: int
-    bug_contact_user_id: int
-    text_contact_user_id: int
+    bot_status_contact_user_id: int
+    issue_contact_user_id: int
     database_path: Path
     channel_pairs: tuple[ChannelPairConfig, ...]
     dev_guild_id: int | None = None
@@ -107,8 +107,8 @@ def load_config(
         bot,
         {
             "guild_id",
-            "bug_contact_user_id",
-            "text_contact_user_id",
+            "bot_status_contact_user_id",
+            "issue_contact_user_id",
             "dev_guild_id",
         },
         "bot",
@@ -116,11 +116,11 @@ def load_config(
     _reject_unknown_keys(database, {"path"}, "database")
 
     guild_id = _require_snowflake(bot, "guild_id", "bot")
-    bug_contact_user_id = _require_snowflake(
-        bot, "bug_contact_user_id", "bot"
+    bot_status_contact_user_id = _require_snowflake(
+        bot, "bot_status_contact_user_id", "bot"
     )
-    text_contact_user_id = _require_snowflake(
-        bot, "text_contact_user_id", "bot"
+    issue_contact_user_id = _require_snowflake(
+        bot, "issue_contact_user_id", "bot"
     )
     dev_guild_id = _optional_snowflake(bot, "dev_guild_id", "bot")
 
@@ -140,8 +140,8 @@ def load_config(
     return BotConfig(
         token=token,
         guild_id=guild_id,
-        bug_contact_user_id=bug_contact_user_id,
-        text_contact_user_id=text_contact_user_id,
+        bot_status_contact_user_id=bot_status_contact_user_id,
+        issue_contact_user_id=issue_contact_user_id,
         database_path=database_path,
         channel_pairs=channel_pairs,
         dev_guild_id=dev_guild_id,

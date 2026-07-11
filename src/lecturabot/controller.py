@@ -865,8 +865,8 @@ class LecturaController:
     def _queue_embed(self, state: SessionState) -> discord.Embed:
         return build_queue_embed(
             state,
-            bug_contact_user_id=self.config.bug_contact_user_id,
-            text_contact_user_id=self.config.text_contact_user_id,
+            bot_status_contact_user_id=self.config.bot_status_contact_user_id,
+            issue_contact_user_id=self.config.issue_contact_user_id,
         )
 
     @staticmethod

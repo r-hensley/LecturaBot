@@ -78,6 +78,10 @@ The text/voice channel pairs are read from `config.toml`. Admins can change the
 `[[channel_pairs]]` entries there, provided each text and voice channel ID is
 unique, then restart the bot to apply the change.
 
+Queue panels use `bot_status_contact_user_id` for **Bot not working?** and
+`issue_contact_user_id` for **Found a bug or text issue?**. Both contacts are
+configured independently in `config.toml`.
+
 For quick slash-command updates during development, set `dev_guild_id` in `config.toml`. Without it, commands are synced globally and may take longer to appear.
 
 ## Reading catalog

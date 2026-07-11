@@ -205,7 +205,20 @@ This numbered layout and publication lifecycle are **clone enhancements** from
 live testing. They do not change the unnumbered original-bot evidence template
 or prove how the original bot managed messages internally.
 
-### 3.4 Observed `discord.py` queue embed builder
+### 3.4 Clone enhancement: testing support contacts
+
+During testing, the clone deliberately replaces the observed support wording
+with two clearer routes:
+
+```md
+Bot not working? → <@{bot_status_contact_user_id}>
+Found a bug or text issue? → <@{issue_contact_user_id}>
+```
+
+The first contact handles availability and deployment problems. The second
+reviews bot bugs and reading-text issues. Both IDs are configured independently.
+
+### 3.5 `discord.py` queue embed builder with clone enhancements
 
 ```python
 from dataclasses import dataclass
@@ -254,8 +267,8 @@ def build_queue_embed(
     members: list[QueueMemberView],
     session_id: int | None,
     turn_started_unix: int | None,
-    bug_contact_user_id: int,
-    text_contact_user_id: int,
+    bot_status_contact_user_id: int,
+    issue_contact_user_id: int,
 ) -> discord.Embed:
     lines = ["**-- Cola / Queue --**"]
 
@@ -264,8 +277,8 @@ def build_queue_embed(
             [
                 "Vacío / Empty",
                 "",
-                f"if bugs: ping <@{bug_contact_user_id}>",
-                f"if text problem: ping <@{text_contact_user_id}>",
+                f"Bot not working? → <@{bot_status_contact_user_id}>",
+                f"Found a bug or text issue? → <@{issue_contact_user_id}>",
             ]
         )
         return discord.Embed(title=QUEUE_TITLE, description="\n".join(lines))
@@ -279,8 +292,8 @@ def build_queue_embed(
         )
     lines.extend(
         [
-            f"if bugs: ping <@{bug_contact_user_id}>",
-            f"if text problem: ping <@{text_contact_user_id}>",
+            f"Bot not working? → <@{bot_status_contact_user_id}>",
+            f"Found a bug or text issue? → <@{issue_contact_user_id}>",
         ]
     )
 

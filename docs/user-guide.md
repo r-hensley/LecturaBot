@@ -161,6 +161,10 @@ updated statistics appear in the fresh queue panel for the next turn.
 | The correction list is full | Give any remaining pronunciation feedback aloud in the voice channel. |
 | Catalog choices fail in Other Languages | Use **Your own text** and provide the language name. |
 
+Queue panels identify separate contacts for **Bot not working?** and **Found a
+bug or text issue?**. Use the first for availability problems and the second for
+behavior or reading-text problems.
+
 ## Español
 
 ### Inicio rápido
@@ -316,3 +320,7 @@ estadísticas actualizadas aparecerán en el panel nuevo del siguiente turno.
 | Un salto AFK no avanza | Se necesitan tres lectores distintos que estén en la cola y no sean el lector actual; el requisito no se reduce. |
 | La lista de correcciones está llena | Comparte en voz cualquier corrección adicional. |
 | Las opciones del catálogo fallan en Other Languages | Usa **Your own text** e indica el nombre del idioma. |
+
+Los paneles de la cola muestran contactos distintos para **Bot not working?** y
+**Found a bug or text issue?**. Usa el primero si el bot no está disponible y el
+segundo para problemas de comportamiento o de los textos.

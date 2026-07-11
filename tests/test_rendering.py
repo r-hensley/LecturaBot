@@ -48,8 +48,8 @@ def test_active_and_empty_queue_embeds_match_metadata_contract() -> None:
 
     embed = build_queue_embed(
         active,
-        bug_contact_user_id=900,
-        text_contact_user_id=901,
+        bot_status_contact_user_id=900,
+        issue_contact_user_id=901,
     )
 
     assert embed.title == QUEUE_TITLE
@@ -59,8 +59,8 @@ def test_active_and_empty_queue_embeds_match_metadata_contract() -> None:
         "**2.** <@100> | turns: *n/a* | avg reading time: *n/a*\n"
         "\n"
         "Turno actual comenzó / Current turn started <t:1720000000:R>\n"
-        "if bugs: ping <@900>\n"
-        "if text problem: ping <@901>"
+        "Bot not working? → <@900>\n"
+        "Found a bug or text issue? → <@901>"
     )
     assert embed.footer.text == "id: 11996"
     assert embed.colour is None
@@ -69,16 +69,16 @@ def test_active_and_empty_queue_embeds_match_metadata_contract() -> None:
     empty = SessionState(12000, 1, 101, 201)
     empty_embed = build_queue_embed(
         empty,
-        bug_contact_user_id=900,
-        text_contact_user_id=901,
+        bot_status_contact_user_id=900,
+        issue_contact_user_id=901,
     )
     assert empty_embed.title == QUEUE_TITLE
     assert empty_embed.description == (
         "**-- Cola / Queue --**\n"
         "Vacío / Empty\n"
         "\n"
-        "if bugs: ping <@900>\n"
-        "if text problem: ping <@901>"
+        "Bot not working? → <@900>\n"
+        "Found a bug or text issue? → <@901>"
     )
     assert empty_embed.footer.text is None
 
@@ -98,8 +98,8 @@ def test_waiting_queue_positions_follow_join_order() -> None:
 
     embed = build_queue_embed(
         waiting,
-        bug_contact_user_id=900,
-        text_contact_user_id=901,
+        bot_status_contact_user_id=900,
+        issue_contact_user_id=901,
     )
 
     assert embed.description == (
@@ -107,8 +107,8 @@ def test_waiting_queue_positions_follow_join_order() -> None:
         "**1.** <@100> | turns: *n/a* | avg reading time: *n/a*\n"
         "**2.** <@200> | turns: *1* | avg reading time: *01:05*\n"
         "\n"
-        "if bugs: ping <@900>\n"
-        "if text problem: ping <@901>"
+        "Bot not working? → <@900>\n"
+        "Found a bug or text issue? → <@901>"
     )
 
 

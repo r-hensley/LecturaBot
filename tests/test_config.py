@@ -33,8 +33,8 @@ def _config_text(*pairs: str, bot_extra: str = "") -> str:
         """
 [bot]
 guild_id = 1
-bug_contact_user_id = 2
-text_contact_user_id = 3
+bot_status_contact_user_id = 2
+issue_contact_user_id = 3
 """
         + bot_extra
         + """
@@ -74,6 +74,8 @@ def test_loads_typed_config_and_resolves_database_from_config_directory(
 
     assert config.token == TOKEN_ENV["LECTURABOT_TOKEN"]
     assert config.guild_id == 1
+    assert config.bot_status_contact_user_id == 2
+    assert config.issue_contact_user_id == 3
     assert config.dev_guild_id == 4
     assert config.database_path == (
         config_path.parent / "state" / "lecturabot.sqlite3"

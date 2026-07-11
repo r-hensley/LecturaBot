@@ -117,6 +117,10 @@ Observed behavior includes:
 
 ### Clone requirements from live POC testing
 
+- **Testing support contacts:** The clone replaces the original support copy
+  with two explicit routes: `Bot not working?` pings the configured bot-status
+  contact, while `Found a bug or text issue?` pings the configured issue-review
+  contact. These contacts remain independently configurable.
 - **Pass Turn authorization:** **Pasar turno / Pass Turn** is a current-reader
   action only. A waiting reader must not be allowed to advance the turn with
   that control.

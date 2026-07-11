@@ -35,8 +35,8 @@ def format_average(seconds: int | None) -> str:
 def build_queue_embed(
     state: SessionState,
     *,
-    bug_contact_user_id: int,
-    text_contact_user_id: int,
+    bot_status_contact_user_id: int,
+    issue_contact_user_id: int,
 ) -> discord.Embed:
     lines = ["**-- Cola / Queue --**"]
     if not state.queue:
@@ -44,8 +44,8 @@ def build_queue_embed(
             [
                 "Vacío / Empty",
                 "",
-                f"if bugs: ping <@{bug_contact_user_id}>",
-                f"if text problem: ping <@{text_contact_user_id}>",
+                f"Bot not working? → <@{bot_status_contact_user_id}>",
+                f"Found a bug or text issue? → <@{issue_contact_user_id}>",
             ]
         )
         return discord.Embed(title=QUEUE_TITLE, description="\n".join(lines))
@@ -83,8 +83,8 @@ def build_queue_embed(
         )
     lines.extend(
         [
-            f"if bugs: ping <@{bug_contact_user_id}>",
-            f"if text problem: ping <@{text_contact_user_id}>",
+            f"Bot not working? → <@{bot_status_contact_user_id}>",
+            f"Found a bug or text issue? → <@{issue_contact_user_id}>",
         ]
     )
     description = "\n".join(lines)

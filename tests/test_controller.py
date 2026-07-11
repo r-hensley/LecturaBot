@@ -103,8 +103,8 @@ def _controller(service: _FakeService) -> LecturaController:
     config = BotConfig(
         token="test-token",
         guild_id=1,
-        bug_contact_user_id=900,
-        text_contact_user_id=901,
+        bot_status_contact_user_id=900,
+        issue_contact_user_id=901,
         database_path=Path("test.sqlite3"),
         channel_pairs=(),
     )
