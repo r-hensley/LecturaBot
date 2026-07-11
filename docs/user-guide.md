@@ -15,7 +15,8 @@ corrections, and reading-time statistics.
 1. Join a **Lectura voice channel**.
 2. Open the text channel with the same room number.
 3. Type `/lecturatest` in that text channel.
-4. Follow the queue link and click **Unirse / Enter**.
+4. Use the new queue panel that appears in the channel and click
+   **Unirse / Enter**.
 5. Wait for at least two people to join the queue, then click
    **Comenzar Lectura / Start Reading**.
 6. When the bot mentions you, choose a language and level or submit your own
@@ -46,9 +47,10 @@ passes to the next reader when the session can continue.
 | **Instrucciones / Instructions** | Shows a short private reminder of the workflow. |
 | **Comenzar Lectura / Start Reading** | Starts the rotation when at least two queued participants are ready. |
 
-`/lecturatest` opens the queue. Running it again refreshes the room's queue
-panel instead of creating a separate session. This temporary command avoids a
-name conflict while the original reading bot is still active.
+`/lecturatest` publishes a fresh public queue panel in the channel. Running it
+again replaces the previous panel instead of creating a separate session. This
+temporary command avoids a name conflict while the original reading bot is
+still active.
 
 Each room's queue can contain up to 25 people.
 
@@ -147,7 +149,7 @@ updated statistics appear in the fresh queue panel for the next turn.
 | Message or symptom | What to do |
 | --- | --- |
 | Join the matching voice channel first | Move to the voice channel paired with the current text channel. |
-| This queue panel is no longer active | Run `/lecturatest` again and use the linked queue panel. |
+| This queue panel is no longer active | Run `/lecturatest` again and use the new queue panel. |
 | That picker, reading, or turn is no longer active | Use the newest message for the current reader. |
 | You are already in the queue | Continue waiting; do not press Enter again. |
 | You already voted | Your skip vote was recorded and cannot be submitted twice. |
@@ -162,7 +164,8 @@ updated statistics appear in the fresh queue panel for the next turn.
 1. Únete a un **canal de voz de Lectura**.
 2. Abre el canal de texto que tenga el mismo número.
 3. Escribe `/lecturatest` en ese canal de texto.
-4. Abre el enlace de la cola y pulsa **Unirse / Enter**.
+4. Usa el panel nuevo de la cola que aparece en el canal y pulsa
+   **Unirse / Enter**.
 5. Espera hasta que haya al menos dos personas en la cola y pulsa
    **Comenzar Lectura / Start Reading**.
 6. Cuando el bot te mencione, elige un idioma y nivel o proporciona tu propio
@@ -193,9 +196,10 @@ el bot pasará al siguiente lector cuando la sesión pueda continuar.
 | **Instrucciones / Instructions** | Muestra en privado un recordatorio breve del proceso. |
 | **Comenzar Lectura / Start Reading** | Comienza la rotación cuando haya al menos dos participantes preparados. |
 
-`/lecturatest` abre la cola. Volver a ejecutarlo actualiza el panel de la sala;
-no crea una sesión separada. Este comando temporal evita un conflicto de
-nombres mientras el bot de lectura original siga activo.
+`/lecturatest` publica un panel nuevo y público de la cola en el canal. Volver a
+ejecutarlo reemplaza el panel anterior; no crea una sesión separada. Este
+comando temporal evita un conflicto de nombres mientras el bot de lectura
+original siga activo.
 
 La cola de cada sala puede contener hasta 25 personas.
 
@@ -297,7 +301,7 @@ estadísticas actualizadas aparecerán en el panel nuevo del siguiente turno.
 | Mensaje o problema | Solución |
 | --- | --- |
 | Únete primero al canal de voz correspondiente | Entra al canal de voz asociado con el canal de texto actual. |
-| Este panel de cola ya no está activo | Ejecuta `/lecturatest` otra vez y usa el panel enlazado. |
+| Este panel de cola ya no está activo | Ejecuta `/lecturatest` otra vez y usa el panel nuevo. |
 | Ese selector, texto o turno ya no está activo | Usa el mensaje más reciente del lector actual. |
 | Ya estás en la cola | Sigue esperando; no vuelvas a pulsar Unirse. |
 | Ya votaste | Tu voto fue registrado y no puedes enviarlo dos veces. |

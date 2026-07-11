@@ -67,8 +67,10 @@ The supplied instructions ask people to correct only readers who are reading in 
 If nobody remains, the queue displays **Vacío / Empty**.
 
 The POC temporarily exposes this workflow through `/lecturatest` so it can run
-beside the original bot without colliding with `/queue` or `/cola`. The latter
-remain the planned final command names after the original bot is retired.
+beside the original bot without colliding with `/queue` or `/cola`. The command
+publishes a fresh public queue panel in the invoking text channel rather than
+returning an ephemeral link. The latter remain the planned final command names
+after the original bot is retired.
 
 ## 4. Queue and voice-channel behavior
 

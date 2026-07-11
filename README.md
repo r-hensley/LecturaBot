@@ -33,7 +33,7 @@ The implementation follows the observed behavior in [EXPECTED_OPERATION.md](EXPE
 ## POC decisions where the source behavior is unresolved
 
 - The server guide confirms a **Start Reading** action, but it was absent from the captured queue component dump. This POC appends a provisional `Comenzar Lectura / Start Reading` button with `custom_id="start_reading"` while leaving all observed controls unchanged.
-- `/lecturatest` maintains one active queue panel per channel pair. Queue departures and turn changes publish a fresh numbered panel so the current order and updated statistics remain visible; superseded panels are retired. The planned final command names remain `/queue` and `/cola` after the original bot is retired.
+- `/lecturatest` publishes a fresh public queue panel in the channel and maintains one active queue panel per channel pair. Queue departures and turn changes publish a fresh numbered panel so the current order and updated statistics remain visible; superseded panels are retired. The planned final command names remain `/queue` and `/cola` after the original bot is retired.
 - A session pauses when fewer than two queued voice participants remain. It must be started again after the second participant returns.
 - Reading time runs from publication of the reading text until a normal current-reader pass. Selection time, skipped turns, and disconnected turns do not affect statistics.
 - **Pasar turno / Pass Turn** is available only to the current reader. A separate **Saltar turno ausente / Skip AFK Turn** action requires three unique votes from queued, non-current readers; the threshold is never reduced when fewer voters are available.
@@ -73,6 +73,10 @@ cp config.example.toml config.toml
 ```bash
 export LECTURABOT_TOKEN='your-token-here'
 ```
+
+The text/voice channel pairs are read from `config.toml`. Admins can change the
+`[[channel_pairs]]` entries there, provided each text and voice channel ID is
+unique, then restart the bot to apply the change.
 
 For quick slash-command updates during development, set `dev_guild_id` in `config.toml`. Without it, commands are synced globally and may take longer to appear.
 
