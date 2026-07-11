@@ -1,0 +1,151 @@
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+import pytest
+
+from lecturabot.config import BotConfig
+from lecturabot.controller import LecturaController
+from lecturabot.models import SessionState
+from lecturabot.views import QueueView
+
+
+class _FakeMessage:
+    def __init__(self, message_id: int, name: str, events: list[str]) -> None:
+        self.id = message_id
+        self.name = name
+        self.events = events
+        self.edit_calls: list[dict[str, Any]] = []
+
+    async def edit(self, **kwargs: Any) -> None:
+        self.events.append(f"{self.name}.edit")
+        self.edit_calls.append(kwargs)
+
+
+class _FakeChannel:
+    def __init__(
+        self,
+        *,
+        new_message: _FakeMessage,
+        old_message: _FakeMessage,
+        events: list[str],
+    ) -> None:
+        self.new_message = new_message
+        self.old_message = old_message
+        self.events = events
+        self.send_calls: list[dict[str, Any]] = []
+        self.fetch_calls: list[int] = []
+
+    async def send(self, **kwargs: Any) -> _FakeMessage:
+        self.events.append("send")
+        self.send_calls.append(kwargs)
+        return self.new_message
+
+    async def fetch_message(self, message_id: int) -> _FakeMessage:
+        self.events.append(f"fetch:{message_id}")
+        self.fetch_calls.append(message_id)
+        if message_id != self.old_message.id:
+            raise AssertionError(f"unexpected message fetch: {message_id}")
+        return self.old_message
+
+
+class _FakeService:
+    def __init__(self, events: list[str], *, fail_persistence: bool = False) -> None:
+        self.events = events
+        self.fail_persistence = fail_persistence
+        self.set_queue_calls: list[tuple[int, int]] = []
+
+    async def set_queue_message(
+        self,
+        text_channel_id: int,
+        message_id: int,
+    ) -> None:
+        self.events.append("persist")
+        self.set_queue_calls.append((text_channel_id, message_id))
+        if self.fail_persistence:
+            raise RuntimeError("database write failed")
+
+
+def _controller(service: _FakeService) -> LecturaController:
+    config = BotConfig(
+        token="test-token",
+        guild_id=1,
+        bug_contact_user_id=900,
+        text_contact_user_id=901,
+        database_path=Path("test.sqlite3"),
+        channel_pairs=(),
+    )
+    return LecturaController(
+        bot=object(),  # type: ignore[arg-type]
+        config=config,
+        service=service,  # type: ignore[arg-type]
+    )
+
+
+def _state() -> SessionState:
+    return SessionState(
+        session_id=12_007,
+        guild_id=1,
+        text_channel_id=101,
+        voice_channel_id=201,
+        queue_message_id=111,
+    )
+
+
+@pytest.mark.asyncio
+async def test_repost_queue_persists_new_panel_before_retiring_old_panel() -> None:
+    events: list[str] = []
+    old_message = _FakeMessage(111, "old", events)
+    new_message = _FakeMessage(222, "new", events)
+    channel = _FakeChannel(
+        new_message=new_message,
+        old_message=old_message,
+        events=events,
+    )
+    service = _FakeService(events)
+    controller = _controller(service)
+
+    async def text_channel(_channel_id: int) -> _FakeChannel:
+        return channel
+
+    controller._text_channel = text_channel  # type: ignore[method-assign]
+
+    result = await controller._refresh_queue(_state(), repost=True)
+
+    assert result is new_message
+    assert service.set_queue_calls == [(101, 222)]
+    assert channel.fetch_calls == [111]
+    assert events == ["send", "persist", "fetch:111", "old.edit"]
+    assert old_message.edit_calls == [{"view": None}]
+    assert new_message.edit_calls == []
+    assert len(channel.send_calls) == 1
+    assert isinstance(channel.send_calls[0]["view"], QueueView)
+
+
+@pytest.mark.asyncio
+async def test_repost_queue_persistence_failure_retires_only_new_panel() -> None:
+    events: list[str] = []
+    old_message = _FakeMessage(111, "old", events)
+    new_message = _FakeMessage(222, "new", events)
+    channel = _FakeChannel(
+        new_message=new_message,
+        old_message=old_message,
+        events=events,
+    )
+    service = _FakeService(events, fail_persistence=True)
+    controller = _controller(service)
+
+    async def text_channel(_channel_id: int) -> _FakeChannel:
+        return channel
+
+    controller._text_channel = text_channel  # type: ignore[method-assign]
+
+    with pytest.raises(RuntimeError, match="database write failed"):
+        await controller._refresh_queue(_state(), repost=True)
+
+    assert service.set_queue_calls == [(101, 222)]
+    assert events == ["send", "persist", "new.edit"]
+    assert new_message.edit_calls == [{"view": None}]
+    assert channel.fetch_calls == []
+    assert old_message.edit_calls == []

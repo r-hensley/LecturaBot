@@ -605,7 +605,10 @@ class LecturaController:
                 transition.state.text_channel_id,
                 transition.retired_reading_message_id,
             )
-            await self._refresh_queue(transition.state)
+            await self._refresh_queue(
+                transition.state,
+                repost=transition.repost_queue,
+            )
         except Exception as error:
             # A queue edit should not prevent the newly committed reader from
             # receiving their picker. Surface the edit failure afterward.
@@ -624,13 +627,19 @@ class LecturaController:
         if publication_error is not None:
             raise publication_error
 
-    async def _refresh_queue(self, state: SessionState) -> discord.Message:
-        """Create or edit the one authoritative queue panel for a room."""
+    async def _refresh_queue(
+        self,
+        state: SessionState,
+        *,
+        repost: bool = False,
+    ) -> discord.Message:
+        """Create, edit, or deliberately repost a room's queue panel."""
         channel = await self._text_channel(state.text_channel_id)
         message: discord.Message | None = None
-        if state.queue_message_id is not None:
+        previous_message_id = state.queue_message_id
+        if not repost and previous_message_id is not None:
             try:
-                message = await channel.fetch_message(state.queue_message_id)
+                message = await channel.fetch_message(previous_message_id)
             except discord.NotFound:
                 message = None
         if message is None:
@@ -653,6 +662,11 @@ class LecturaController:
                         message.id,
                     )
                 raise
+            if repost and previous_message_id is not None:
+                await self._retire_message(
+                    state.text_channel_id,
+                    previous_message_id,
+                )
             return message
         await message.edit(
             embed=self._queue_embed(state),

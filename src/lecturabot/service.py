@@ -44,6 +44,7 @@ class Transition:
     vote_count: int = 0
     votes_required: int = 0
     advanced: bool = False
+    repost_queue: bool = False
 
 
 def parse_correction_lines(
@@ -336,6 +337,7 @@ class SessionService:
                     else None
                 ),
                 advanced=advanced,
+                repost_queue=True,
             )
 
     async def start(self, *, text_channel_id: int, actor_id: int) -> Transition:

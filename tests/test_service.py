@@ -295,6 +295,7 @@ async def test_departure_removes_vote_without_lowering_fixed_threshold(
     departure = await service.leave(text_channel_id=101, user_id=30)
 
     assert departure.advanced is False
+    assert departure.repost_queue is True
     assert departure.state.current_user_id == 10
     assert departure.state.skip_votes == {20}
     assert departure.retired_picker_message_id is None
@@ -323,6 +324,7 @@ async def test_leaving_current_advances_and_rejoining_uses_queue_tail(
 
     left = await service.leave(text_channel_id=101, user_id=10)
     assert left.advanced is True
+    assert left.repost_queue is True
     assert left.retired_picker_message_id == 500
     assert left.state.queue == [20, 30]
     assert left.state.current_user_id == 20
@@ -330,6 +332,7 @@ async def test_leaving_current_advances_and_rejoining_uses_queue_tail(
     await _join(service, 10)
     removed_waiter = await service.leave(text_channel_id=101, user_id=30)
     assert removed_waiter.advanced is False
+    assert removed_waiter.repost_queue is True
     assert removed_waiter.state.queue == [20, 10]
     assert removed_waiter.state.current_user_id == 20
 
@@ -340,6 +343,7 @@ async def test_leaving_current_advances_and_rejoining_uses_queue_tail(
     )
     below_minimum = await service.leave(text_channel_id=101, user_id=20)
     assert below_minimum.advanced is False
+    assert below_minimum.repost_queue is True
     assert below_minimum.state.queue == [10]
     assert below_minimum.state.phase is SessionPhase.WAITING
     assert below_minimum.state.current_user_id is None
