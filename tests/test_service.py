@@ -554,7 +554,7 @@ async def test_corrections_preserve_sources_and_reject_stale_ids(
         reader_id=10,
         picker_message_id=500,
         language=Language.ENGLISH,
-        body="However, she was abducted.",
+        body="However, she was abducted by pirates.",
     )
     await service.set_reading_message(
         text_channel_id=101,
@@ -598,7 +598,7 @@ async def test_corrections_preserve_sources_and_reject_stale_ids(
         reading_message_id=700,
         corrector_id=30,
         corrector_display_name="Listener 30",
-        items=["abducted", "missing"],
+        items=["abducted", "pirates"],
         source=CorrectionSource.REPLY,
     )
 
@@ -619,6 +619,101 @@ async def test_corrections_preserve_sources_and_reject_stale_ids(
             source_message_id=701,
         )
     _assert_error(stale_turn, "stale_turn")
+
+
+@pytest.mark.asyncio
+async def test_corrections_must_appear_in_original_text_and_not_repeat(
+    tmp_path: Path,
+) -> None:
+    service, repository, _ = await _make_service(tmp_path)
+    await _join(service, 10, 20, 30)
+    await service.start(text_channel_id=101, actor_id=10)
+    await service.set_picker_message(
+        text_channel_id=101,
+        reader_id=10,
+        message_id=500,
+    )
+    await service.begin_custom_reading(
+        text_channel_id=101,
+        reader_id=10,
+        picker_message_id=500,
+        language=Language.ENGLISH,
+        body="New York is not new to this reader.",
+    )
+    await service.set_reading_message(
+        text_channel_id=101,
+        reader_id=10,
+        message_id=700,
+    )
+    before = await service.get_session(101)
+
+    with pytest.raises(SessionError) as missing_text:
+        await service.add_corrections(
+            text_channel_id=101,
+            reading_message_id=700,
+            corrector_id=20,
+            corrector_display_name="Reader 20",
+            items=["Boston"],
+            source=CorrectionSource.BUTTON,
+        )
+    _assert_error(missing_text, "correction_not_in_text")
+
+    with pytest.raises(SessionError) as repeated_submission:
+        await service.add_corrections(
+            text_channel_id=101,
+            reading_message_id=700,
+            corrector_id=20,
+            corrector_display_name="Reader 20",
+            items=["New York", "new   york"],
+            source=CorrectionSource.BUTTON,
+        )
+    _assert_error(repeated_submission, "duplicate_correction")
+
+    accepted = await service.add_corrections(
+        text_channel_id=101,
+        reading_message_id=700,
+        corrector_id=20,
+        corrector_display_name="Reader 20",
+        items=["New York"],
+        source=CorrectionSource.BUTTON,
+    )
+
+    with pytest.raises(SessionError) as repeated_existing:
+        await service.add_corrections(
+            text_channel_id=101,
+            reading_message_id=700,
+            corrector_id=20,
+            corrector_display_name="Reader 20",
+            items=["new york"],
+            source=CorrectionSource.REPLY,
+        )
+    _assert_error(repeated_existing, "duplicate_correction")
+
+    cross_corrector = await service.add_corrections(
+        text_channel_id=101,
+        reading_message_id=700,
+        corrector_id=30,
+        corrector_display_name="Reader 30",
+        items=["new york"],
+        source=CorrectionSource.REPLY,
+    )
+
+    after = await service.get_session(101)
+    persisted = await repository.load_session(101)
+    assert before is not None
+    assert accepted.state.active_reading is not None
+    assert cross_corrector.state.active_reading is not None
+    assert after is not None
+    assert persisted is not None
+    assert after.to_dict() == cross_corrector.state.to_dict()
+    assert persisted.to_dict() == cross_corrector.state.to_dict()
+    assert cross_corrector.state.active_reading.correction_count == 1
+    assert (
+        cross_corrector.state.active_reading.correction_groups[1]
+        .entries[0]
+        .discarded
+        is True
+    )
 
 
 @pytest.mark.asyncio
@@ -704,7 +799,7 @@ async def test_aggregate_correction_limits_reject_before_persisting(
         reading_message_id=700,
         corrector_id=20,
         corrector_display_name="Reader 20",
-        items=["word"],
+        items=["short"],
         source=CorrectionSource.BUTTON,
     )
     before = accepted.state
@@ -718,7 +813,7 @@ async def test_aggregate_correction_limits_reject_before_persisting(
             reading_message_id=700,
             corrector_id=20,
             corrector_display_name="Reader 20",
-            items=["one", "two"],
+            items=["A", "reading"],
             source=CorrectionSource.BUTTON,
         )
     _assert_error(too_many_entries, "correction_summary_full")
@@ -729,7 +824,7 @@ async def test_aggregate_correction_limits_reject_before_persisting(
             reading_message_id=700,
             corrector_id=20,
             corrector_display_name="Reader 20",
-            items=["1234567"],
+            items=["reading"],
             source=CorrectionSource.BUTTON,
         )
     _assert_error(too_many_characters, "correction_summary_full")

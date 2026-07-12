@@ -6,6 +6,7 @@ import asyncio
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 import random
+import re
 import time
 
 from .config import ChannelPairConfig
@@ -73,6 +74,19 @@ def parse_correction_lines(
             f"Each correction must be {max_item_length} characters or fewer.",
         )
     return items
+
+
+def _correction_pattern(correction: str) -> str:
+    pattern = r"\s+".join(re.escape(part) for part in correction.split())
+    if correction[0].isalnum():
+        pattern = rf"(?<!\w){pattern}"
+    if correction[-1].isalnum():
+        pattern = rf"{pattern}(?!\w)"
+    return pattern
+
+
+def _contains_correction(body: str, correction: str) -> bool:
+    return re.search(_correction_pattern(correction), body, re.IGNORECASE) is not None
 
 
 class SessionService:
@@ -543,6 +557,28 @@ class SessionService:
                     "El lector no puede corregirse a sí mismo. / "
                     "The reader cannot submit their own corrections.",
                 )
+            seen_in_submission: set[str] = set()
+            seen_by_corrector = {
+                reading._normalize_correction(entry.text)
+                for group in reading.correction_groups
+                if group.user_id == corrector_id
+                for entry in group.entries
+            }
+            for item in items:
+                normalized = reading._normalize_correction(item)
+                if normalized in seen_in_submission or normalized in seen_by_corrector:
+                    raise SessionError(
+                        "duplicate_correction",
+                        "Esa corrección ya fue enviada por ti. / "
+                        "You already submitted that correction.",
+                    )
+                seen_in_submission.add(normalized)
+                if not _contains_correction(reading.body, item):
+                    raise SessionError(
+                        "correction_not_in_text",
+                        "Esa corrección no aparece en el texto original. / "
+                        "That correction does not appear in the original text.",
+                    )
             existing_entries = sum(
                 len(group.entries) for group in reading.correction_groups
             )
