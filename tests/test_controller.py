@@ -153,9 +153,11 @@ class _CorrectionService:
         state: SessionState,
         *,
         error: SessionError | None = None,
+        notice: str = "Corrections saved.",
     ) -> None:
         self.state = state
         self.error = error
+        self.notice = notice
         self.find_calls: list[int] = []
         self.add_calls: list[dict[str, Any]] = []
 
@@ -167,7 +169,7 @@ class _CorrectionService:
         self.add_calls.append(kwargs)
         if self.error is not None:
             raise self.error
-        return Transition(self.state, "Corrections saved.")
+        return Transition(self.state, self.notice)
 
 
 class _ReplyMember:
@@ -399,7 +401,7 @@ async def test_reply_to_reading_submits_corrections_and_refreshes_message(
     monkeypatch.setattr("lecturabot.controller.discord.Member", _ReplyMember)
     reply = _ReplyMessage(
         _ReplyMember(20, "Listener"),
-        "produce (noun), 🍎,",
+        "produce (noun), (stress, keep trying :peepoPray:),",
     )
 
     await controller.handle_reply(reply)  # type: ignore[arg-type]
@@ -409,21 +411,24 @@ async def test_reply_to_reading_submits_corrections_and_refreshes_message(
     assert service.add_calls[0]["text_channel_id"] == 101
     assert service.add_calls[0]["reading_message_id"] == 700
     assert service.add_calls[0]["corrector_id"] == 20
-    assert service.add_calls[0]["items"] == ["produce (noun)", "🍎"]
+    assert service.add_calls[0]["items"] == [
+        "produce (noun)",
+        "(stress, keep trying :peepoPray:)",
+    ]
     assert service.add_calls[0]["source"] is CorrectionSource.REPLY
     assert refreshed == [state]
 
 
 @pytest.mark.asyncio
-async def test_modal_reports_all_unmatched_corrections_ephemerally() -> None:
+async def test_modal_saves_unmatched_corrections_and_reports_unhighlighted_count() -> None:
     state = _reading_state()
     user_message = (
-        "No se encontraron: banana (noun), 🐕. / "
-        "Not found: banana (noun), 🐕."
+        "Correcciones guardadas. Sin resaltar: 2. / Corrections saved. "
+        "Listed without highlighting: 2."
     )
     service = _CorrectionService(
         state,
-        error=SessionError("correction_not_in_text", user_message),
+        notice=user_message,
     )
     pair = ChannelPairConfig(
         name="sandbox-1",
@@ -440,6 +445,13 @@ async def test_modal_reports_all_unmatched_corrections_ephemerally() -> None:
     controller._require_matching_voice = (  # type: ignore[method-assign]
         lambda _member, _pair: None
     )
+    refreshed: list[SessionState] = []
+
+    async def refresh(refreshed_state: SessionState) -> bool:
+        refreshed.append(refreshed_state)
+        return True
+
+    controller._refresh_reading = refresh  # type: ignore[method-assign]
 
     await controller.submit_corrections(
         interaction,  # type: ignore[arg-type]
@@ -457,9 +469,9 @@ async def test_modal_reports_all_unmatched_corrections_ephemerally() -> None:
         "banana (noun)",
         "🐕",
     ]
+    assert refreshed == [state]
     assert interaction.response.send_message_calls == []
     assert len(interaction.followup.send_calls) == 1
     sent_message, sent_kwargs = interaction.followup.send_calls[0]
     assert sent_message == user_message
     assert sent_kwargs["ephemeral"] is True
-    assert sent_kwargs["allowed_mentions"].everyone is False

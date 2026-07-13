@@ -115,23 +115,29 @@ Only commas outside parentheses separate entries. For example,
 is allowed.
 
 Each correction can contain up to 100 characters. A reading can hold up to 20
-correction entries and 1,400 correction characters in total. Every entry in a
-batch must match the passage. If one or more entries submitted through the
-modal do not match, the bot adds none of the batch and sends an ephemeral
-message listing every unmatched entry. Correct the list and submit it again.
-An ordinary Discord message reply cannot receive an ephemeral response, so use
-the correction button when you need private validation details.
+correction entries and 1,400 correction characters in total. These limits and
+the duplicate safeguards still apply, but a correction does not have to appear
+in the passage. Every parsed entry is saved and listed. Matching determines
+only whether the bot highlights part of the reading. After a button/modal
+submission, the private confirmation reports how many entries were listed
+without highlighting. A reply updates the visible correction list directly.
 
 The bot groups corrections by corrector. When a submitted word or phrase
 matches the passage, the bot highlights every occurrence without changing the
-passage's capitalization. A trailing parenthetical label remains visible in the
-correction list but is excluded from matching: `produce (noun)` highlights
-`produce`. A supported Unicode fruit or animal emoji may abbreviate a matching
-English or Spanish name in the passage; for example, `🍎` may highlight `apple`
-or `manzana`, while the correction list continues to show `🍎`. If another
-corrector later submits a word or phrase that has already been suggested, the
-later duplicate remains attributed to that corrector but appears as
-`~~struck through~~` to show that it was discarded.
+passage's capitalization. It tries an exact, case-insensitive match first and
+then a conservative fuzzy match for a likely typo. If no clear match is found,
+the correction remains in the list without highlighting the reading.
+
+Parentheses keep an explanation together as one correction, including internal
+commas, a whole sentence, or a custom emoji. For example,
+`(stress :peepoPray:)` remains one displayed correction; the bot may highlight
+`stress` when it finds that word in the reading. The emoji is ordinary
+annotation text, not an abbreviation or alias for another word. A trailing
+label works similarly: `produce (noun)` remains visible as submitted while
+`produce` can be highlighted. If another corrector later submits a word or
+phrase that has already been suggested, the later duplicate remains attributed
+to that corrector but appears as `~~struck through~~` to show that it was
+discarded.
 
 Please submit corrections only when the reader is practicing your native
 language. This is a community rule even though the bot does not currently
@@ -195,7 +201,7 @@ the queue is next refreshed rather than changing by itself at the expiry time.
 | You already voted | Your skip vote was recorded and cannot be submitted twice. |
 | An AFK skip does not advance | Three different queued, non-current readers are required; the threshold is not reduced. |
 | The correction list is full | Give any remaining pronunciation feedback aloud in the voice channel. |
-| One or more modal corrections were not found | Read the private list of every unmatched entry, correct them, and resubmit the whole batch. |
+| A correction is listed but nothing is highlighted | The bot did not find a clear exact or fuzzy source match. The correction was still saved for the reader to review. |
 | No unused catalog text remains at this level | Choose another level or submit your own text; the bot will not repeat a passage for you in the same room session. |
 | Catalog choices fail in Other Languages | Use **Your own text** and provide the language name. |
 
@@ -310,24 +316,31 @@ que la coma de `produce (sustantivo, incontable)` sigue formando parte de una
 sola entrada. Se permite una coma final.
 
 Cada corrección puede tener hasta 100 caracteres. Una lectura puede contener
-un máximo total de 20 correcciones y 1.400 caracteres de corrección. Todas las
-entradas de un lote deben coincidir con el texto. Si una o más entradas enviadas
-mediante el formulario no coinciden, el bot no añade ninguna del lote y te
-envía una respuesta efímera con la lista completa de entradas no encontradas.
-Corrige la lista y vuelve a enviarla. Una respuesta normal a un mensaje de
-Discord no puede recibir una respuesta efímera; usa el botón de correcciones si
-necesitas los detalles de validación en privado.
+un máximo total de 20 correcciones y 1.400 caracteres de corrección. Estos
+límites y las protecciones contra duplicados siguen vigentes, pero una
+corrección no tiene que aparecer en el texto. El bot guarda y muestra cada
+entrada analizada. La coincidencia solo determina si se destaca una parte de la
+lectura. Después de enviar mediante el botón o formulario, la confirmación
+privada indica cuántas entradas quedaron en la lista sin resaltarse. Una
+respuesta al mensaje actualiza directamente la lista visible de correcciones.
 
 El bot agrupa las correcciones por corrector. Cuando una palabra o frase
 coincide con el texto, el bot destaca todas sus apariciones sin cambiar las
-mayúsculas del texto original. Una etiqueta final entre paréntesis continúa
-visible en la lista, pero no forma parte de la búsqueda: `produce (sustantivo)`
-destaca `produce`. Un emoji Unicode compatible de fruta o animal puede abreviar
-un nombre coincidente en inglés o español; por ejemplo, `🍎` puede destacar
-`apple` o `manzana`, mientras la lista de correcciones sigue mostrando `🍎`. Si
-otro corrector envía después una palabra o frase que ya había sido sugerida, la
-corrección posterior seguirá atribuida a esa persona, pero aparecerá
-`~~tachada~~` para indicar que fue descartada.
+mayúsculas del texto original. Primero intenta una coincidencia exacta sin
+distinguir mayúsculas y minúsculas; después intenta una coincidencia difusa y
+conservadora para un posible error tipográfico. Si no encuentra una coincidencia
+clara, la corrección sigue visible en la lista sin destacar la lectura.
+
+Los paréntesis mantienen una explicación completa como una sola corrección,
+incluso si contiene comas, una frase entera o un emoji personalizado. Por
+ejemplo, `(stress :peepoPray:)` permanece como una sola corrección visible; el
+bot puede destacar `stress` si encuentra esa palabra en la lectura. El emoji es
+texto normal de la anotación, no una abreviatura ni un alias de otra palabra.
+Una etiqueta final funciona de la misma manera: `produce (sustantivo)` se
+muestra tal como se envió y `produce` puede quedar destacado. Si otro corrector
+envía después una palabra o frase que ya había sido sugerida, la corrección
+posterior seguirá atribuida a esa persona, pero aparecerá `~~tachada~~` para
+indicar que fue descartada.
 
 Envía correcciones solamente cuando el lector esté practicando tu idioma
 nativo. Esta es una regla de la comunidad, aunque el bot todavía no comprueba
@@ -394,7 +407,7 @@ la ventana.
 | Ya votaste | Tu voto fue registrado y no puedes enviarlo dos veces. |
 | Un salto AFK no avanza | Se necesitan tres lectores distintos que estén en la cola y no sean el lector actual; el requisito no se reduce. |
 | La lista de correcciones está llena | Comparte en voz cualquier corrección adicional. |
-| El formulario no encontró una o más correcciones | Lee la lista privada completa, corrige las entradas y vuelve a enviar todo el lote. |
+| Una corrección aparece en la lista, pero no se destaca nada | El bot no encontró una coincidencia exacta o difusa suficientemente clara. La corrección se guardó igualmente para que el lector pueda revisarla. |
 | No queda ningún texto sin usar en ese nivel | Elige otro nivel o proporciona tu propio texto; el bot no repetirá un texto para ti durante la misma sesión de sala. |
 | Las opciones del catálogo fallan en Other Languages | Usa **Your own text** e indica el nombre del idioma. |
 

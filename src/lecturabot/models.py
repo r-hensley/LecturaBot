@@ -86,15 +86,21 @@ class CorrectionEntry:
 
     @property
     def target_text(self) -> str:
-        """Text in the reading represented by the displayed suggestion."""
+        """Stable comparison text for this listed suggestion.
+
+        Matched entries use their source-text target. Unmatched feedback falls
+        back to the text the corrector submitted so it can still participate in
+        counting and duplicate handling without becoming a reading highlight.
+        """
         return self.match_text or self.text
 
-    def to_dict(self) -> dict[str, str | bool]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "text": self.text,
             "source": self.source.value,
             "discarded": self.discarded,
-            "match_text": self.target_text,
+            # An explicit null means "list this entry without highlighting".
+            "match_text": self.match_text,
         }
 
     @classmethod
@@ -106,11 +112,17 @@ class CorrectionEntry:
             # field. Treat their entries as accepted rather than rejecting an
             # otherwise valid active session during startup recovery.
             discarded=bool(data.get("discarded", False)),
-            # Older snapshots used the displayed correction for matching.
+            # Older snapshots had no match_text field and used the displayed
+            # correction for matching. Explicit null is the new representation
+            # for feedback that should be listed without a source highlight.
             match_text=(
-                None
+                str(data["text"])
                 if "match_text" not in data
-                else str(data["match_text"])
+                else (
+                    None
+                    if data["match_text"] is None
+                    else str(data["match_text"])
+                )
             ),
         )
 
@@ -156,7 +168,7 @@ class ActiveReading:
 
     @property
     def correction_count(self) -> int:
-        """Count normalized source-text targets once across all correctors."""
+        """Count normalized matched targets or unmatched feedback once."""
         return len(
             {
                 self._normalize_correction(entry.target_text)
@@ -169,9 +181,10 @@ class ActiveReading:
     @property
     def correction_texts(self) -> list[str]:
         return [
-            entry.target_text
+            entry.match_text
             for group in self.correction_groups
             for entry in group.entries
+            if entry.match_text
         ]
 
     def add_corrections(
@@ -181,7 +194,7 @@ class ActiveReading:
         corrector_display_name: str,
         items: list[str],
         source: CorrectionSource,
-        match_texts: list[str] | None = None,
+        match_texts: list[str | None] | None = None,
     ) -> None:
         if match_texts is None:
             match_texts = items
@@ -213,7 +226,7 @@ class ActiveReading:
                     )
 
         for item, match_text in zip(items, match_texts, strict=True):
-            normalized = self._normalize_correction(match_text)
+            normalized = self._normalize_correction(match_text or item)
             prior_owners = owners_by_suggestion.get(normalized, set())
             discarded = bool(prior_owners - {corrector_id})
             group.entries.append(

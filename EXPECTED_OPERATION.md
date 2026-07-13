@@ -347,26 +347,29 @@ original channel export.
   are ignored. A comma inside parentheses remains part of its entry.
 - A direct reply to the active reading post is parsed and submitted as
   corrections for that reading; it is not merely ordinary conversation.
-- A trailing parenthetical label is display-only for matching. For example,
-  `produce (noun)` remains exactly that text in the correction summary while
-  the base word `produce` is matched and highlighted in the reading.
-- A supported Unicode fruit or animal emoji can abbreviate the corresponding
-  English or Spanish name. The submitted emoji remains visible in the
-  correction summary while the matched source word is highlighted. Discord
-  custom emoji syntax is not implied by this requirement.
-- A submitted correction batch is atomic. If one or more entries do not match
-  the reading, none of the batch is stored or rendered.
-- For a button/modal submission, the rejection response is ephemeral and lists
-  every unmatched entry in that batch, not only the first one.
-- A normal message reply has no interaction response through which the bot can
-  send an ephemeral error. Reply corrections use the same parsing and matching
-  rules, but the private error-list guarantee applies only to the modal path.
+- Parentheses preserve one complete correction item, even when the contents
+  include commas, a full explanatory sentence, or a custom emoji. For example,
+  `(stress :peepoPray:)` is stored and displayed as one correction. The emoji
+  is annotation text, not an abbreviation or word alias.
+- A trailing parenthetical label also remains in the displayed correction. For
+  example, `produce (noun)` stays exactly as submitted while `produce` can be
+  matched and highlighted in the reading.
+- Every parsed correction item is stored and rendered even if it does not occur
+  in the reading. Match success controls highlighting only; it does not control
+  acceptance of the item or of the rest of its submitted batch.
+- Highlight matching tries an exact, case-insensitive source match first. If
+  that fails, it may use a conservative fuzzy match for a likely typo. A fuzzy
+  result must be sufficiently strong and unambiguous; otherwise the correction
+  remains listed without any source highlight.
+- Existing per-entry, per-reading character/count limits and normalized
+  duplicate handling remain in force independently of source matching.
 
 ### Original-bot correction behavior still to confirm
 
 - The original modal's fields, limits, validation, and response copy. The clone
-  input and atomic-error behavior is specified above.
-- How the original bot parsed reply text and handled unmatched reply entries.
+  input, limits, and highlight-matching behavior are specified above.
+- How the original bot parsed reply text and handled entries it could not
+  highlight.
 - Whether original matching was accent-sensitive, fuzzy, or token-based.
 - How the original handled overlapping phrases or competing match targets.
 - Whether a corrector can edit or delete a submitted correction.
@@ -512,8 +515,8 @@ This is a behavioral inventory, not a database-schema decision.
 - Reading-post identity
 - Turn timestamps and outcome
 - Correction text
-- Display text and derived match target when a parenthetical label or emoji
-  alias is used
+- Display text and optional derived match target; a missing target means the
+  entry remains listed without a source highlight
 - Corrector identity
 - Submission order
 - Accepted or discarded-duplicate status
@@ -549,10 +552,10 @@ The reimplementation is presently expected to need:
   newline and top-level-comma separated entries.
 - Correction attribution, aggregation, counting, text highlighting, and
   strikethrough rendering of later cross-corrector duplicates, including
-  display-only trailing parenthetical labels and English/Spanish fruit or
-  animal emoji aliases.
-- Atomic correction validation, with an ephemeral modal error that lists every
-  unmatched entry and no promise of ephemeral errors for direct replies.
+  free-form parenthesized annotations with sentences, commas, and custom emojis.
+- Acceptance and display of every parsed correction item regardless of source
+  matching, with exact-first, conservative fuzzy typo matching used only to
+  choose source highlights.
 - Visible completed-turn and average-time tracking in independent per-user
   six-hour inactivity windows, updated before the next turn panel is published.
 - An empty-queue state.
@@ -638,12 +641,8 @@ The most useful future examples would show:
 
 - Required replies to the active reading to submit comma- or newline-separated
   corrections, while preserving commas inside parentheses.
-- Required trailing parenthetical labels to remain visible but match their base
-  text, and supported Unicode fruit/animal emoji to abbreviate English or
-  Spanish match words.
-- Required correction batches to reject atomically. Modal rejections are
-  ephemeral and list every unmatched entry; ordinary reply events cannot return
-  ephemeral errors.
+- Raised correction matching and annotation questions that were resolved by
+  later live-use clarification in Batch 9.
 - Required per-reader catalog no-repeat history for one room session, persisted
   across restart and temporary leave/rejoin, reset on an empty queue, with no
   automatic recycling after a reader exhausts a language/level.
@@ -658,3 +657,16 @@ The most useful future examples would show:
   completed reading starts or extends that user's window, and six hours without
   another normal completion resets both the count and average. Queue activity,
   AFK skips, and other users' turns do not extend it.
+
+### Batch 9: Free-form correction and emoji clarification
+
+- Clarified that a custom emoji is ordinary text inside a correction
+  annotation, not an abbreviation for a fruit, animal, or other source word.
+- Confirmed that parentheses can contain a complete explanation, including
+  commas, a sentence, and an emoji, while remaining one correction item; for
+  example, `(stress :peepoPray:)`.
+- Required every parsed item to be accepted and shown even when the bot cannot
+  find it in the reading. Matching now determines highlighting only.
+- Added exact-first, conservative fuzzy matching so a likely typo can still
+  highlight its clear source word; ambiguous or unmatched annotations remain
+  visible without a highlight.

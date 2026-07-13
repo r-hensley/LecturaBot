@@ -1030,6 +1030,44 @@ async def test_annotated_corrections_match_and_deduplicate_by_base_word(
 
 
 @pytest.mark.asyncio
+async def test_fuzzy_typo_uses_source_target_for_duplicate_handling(
+    tmp_path: Path,
+) -> None:
+    service, _ = await _prepare_custom_reading(
+        tmp_path,
+        language=Language.ENGLISH,
+        body="They are receiving help.",
+    )
+
+    typo = await service.add_corrections(
+        text_channel_id=101,
+        reading_message_id=700,
+        corrector_id=20,
+        corrector_display_name="Reader 20",
+        items=["recieving"],
+        source=CorrectionSource.BUTTON,
+    )
+    assert typo.state.active_reading is not None
+    typo_entry = typo.state.active_reading.correction_groups[0].entries[0]
+    assert typo_entry.text == "recieving"
+    assert typo_entry.match_text == "receiving"
+
+    exact = await service.add_corrections(
+        text_channel_id=101,
+        reading_message_id=700,
+        corrector_id=30,
+        corrector_display_name="Reader 30",
+        items=["receiving"],
+        source=CorrectionSource.REPLY,
+    )
+    assert exact.state.active_reading is not None
+    exact_entry = exact.state.active_reading.correction_groups[1].entries[0]
+    assert exact_entry.match_text == "receiving"
+    assert exact_entry.discarded is True
+    assert exact.state.active_reading.correction_count == 1
+
+
+@pytest.mark.asyncio
 async def test_screenshot_comma_reply_entries_are_all_accepted(
     tmp_path: Path,
 ) -> None:
@@ -1077,24 +1115,18 @@ async def test_screenshot_comma_reply_entries_are_all_accepted(
 
 
 @pytest.mark.parametrize(
-    ("language", "body", "alias", "target"),
-    [
-        (Language.ENGLISH, "An apple fell.", "🍎", "apple"),
-        (Language.SPANISH, "El perro corre.", "🐕", "perro"),
-    ],
+    "feedback",
+    ["🍎", ":whatCat:", "<:peepoPray:922638020035883058>"],
 )
 @pytest.mark.asyncio
-async def test_emoji_aliases_match_language_specific_words_and_preserve_display(
+async def test_standalone_emojis_are_saved_without_source_highlights(
     tmp_path: Path,
-    language: Language,
-    body: str,
-    alias: str,
-    target: str,
+    feedback: str,
 ) -> None:
     service, _ = await _prepare_custom_reading(
         tmp_path,
-        language=language,
-        body=body,
+        language=Language.ENGLISH,
+        body="An apple fell.",
     )
 
     accepted = await service.add_corrections(
@@ -1102,53 +1134,64 @@ async def test_emoji_aliases_match_language_specific_words_and_preserve_display(
         reading_message_id=700,
         corrector_id=20,
         corrector_display_name="Reader 20",
-        items=[alias],
+        items=[feedback],
         source=CorrectionSource.BUTTON,
     )
 
     assert accepted.state.active_reading is not None
     entry = accepted.state.active_reading.correction_groups[0].entries[0]
-    assert entry.text == alias
-    assert entry.target_text == target
+    assert entry.text == feedback
+    assert entry.match_text is None
+    assert accepted.state.active_reading.correction_texts == []
+    assert accepted.notice.endswith("Listed without highlighting: 1.")
 
 
 @pytest.mark.asyncio
-async def test_all_unmatched_corrections_are_reported_without_partial_commit(
+async def test_matched_and_unmatched_corrections_are_saved_together(
     tmp_path: Path,
 ) -> None:
     service, repository = await _prepare_custom_reading(
         tmp_path,
         language=Language.ENGLISH,
-        body="An apple grows here.",
+        body="An apple grows here. Stress matters.",
     )
-    before = await service.get_session(101)
+    accepted = await service.add_corrections(
+        text_channel_id=101,
+        reading_message_id=700,
+        corrector_id=20,
+        corrector_display_name="Reader 20",
+        items=parse_correction_lines(
+            "apple, banana (noun), 🐕, (stress :peepoPray:)"
+        ),
+        source=CorrectionSource.BUTTON,
+    )
 
-    with pytest.raises(SessionError) as missing:
-        await service.add_corrections(
-            text_channel_id=101,
-            reading_message_id=700,
-            corrector_id=20,
-            corrector_display_name="Reader 20",
-            items=parse_correction_lines("apple, banana (noun), 🐕"),
-            source=CorrectionSource.BUTTON,
-        )
-
-    _assert_error(missing, "correction_not_in_text")
-    assert "banana (noun)" in missing.value.user_message
-    assert "🐕" in missing.value.user_message
     after = await service.get_session(101)
     persisted = await repository.load_session(101)
-    assert before is not None
     assert after is not None
     assert persisted is not None
-    assert after.to_dict() == before.to_dict()
-    assert persisted.to_dict() == before.to_dict()
+    assert after.to_dict() == accepted.state.to_dict()
+    assert persisted.to_dict() == accepted.state.to_dict()
     assert after.active_reading is not None
-    assert after.active_reading.correction_groups == []
+    entries = after.active_reading.correction_groups[0].entries
+    assert [entry.text for entry in entries] == [
+        "apple",
+        "banana (noun)",
+        "🐕",
+        "(stress :peepoPray:)",
+    ]
+    assert [entry.match_text for entry in entries] == [
+        "apple",
+        None,
+        None,
+        "Stress",
+    ]
+    assert after.active_reading.correction_texts == ["apple", "Stress"]
+    assert accepted.notice.endswith("Listed without highlighting: 2.")
 
 
 @pytest.mark.asyncio
-async def test_corrections_must_appear_in_original_text_and_not_repeat(
+async def test_unmatched_corrections_are_saved_and_duplicates_still_rejected(
     tmp_path: Path,
 ) -> None:
     service, repository, _ = await _make_service(tmp_path)
@@ -1171,18 +1214,31 @@ async def test_corrections_must_appear_in_original_text_and_not_repeat(
         reader_id=10,
         message_id=700,
     )
-    before = await service.get_session(101)
+    unmatched = await service.add_corrections(
+        text_channel_id=101,
+        reading_message_id=700,
+        corrector_id=20,
+        corrector_display_name="Reader 20",
+        items=["Boston"],
+        source=CorrectionSource.BUTTON,
+    )
+    assert unmatched.state.active_reading is not None
+    unmatched_entry = (
+        unmatched.state.active_reading.correction_groups[0].entries[0]
+    )
+    assert unmatched_entry.text == "Boston"
+    assert unmatched_entry.match_text is None
 
-    with pytest.raises(SessionError) as missing_text:
+    with pytest.raises(SessionError) as repeated_unmatched:
         await service.add_corrections(
             text_channel_id=101,
             reading_message_id=700,
             corrector_id=20,
             corrector_display_name="Reader 20",
-            items=["Boston"],
-            source=CorrectionSource.BUTTON,
+            items=["boston"],
+            source=CorrectionSource.REPLY,
         )
-    _assert_error(missing_text, "correction_not_in_text")
+    _assert_error(repeated_unmatched, "duplicate_correction")
 
     with pytest.raises(SessionError) as repeated_submission:
         await service.add_corrections(
@@ -1226,14 +1282,17 @@ async def test_corrections_must_appear_in_original_text_and_not_repeat(
 
     after = await service.get_session(101)
     persisted = await repository.load_session(101)
-    assert before is not None
     assert accepted.state.active_reading is not None
     assert cross_corrector.state.active_reading is not None
     assert after is not None
     assert persisted is not None
     assert after.to_dict() == cross_corrector.state.to_dict()
     assert persisted.to_dict() == cross_corrector.state.to_dict()
-    assert cross_corrector.state.active_reading.correction_count == 1
+    assert cross_corrector.state.active_reading.correction_count == 2
+    assert cross_corrector.state.active_reading.correction_texts == [
+        "New York",
+        "New York",
+    ]
     assert (
         cross_corrector.state.active_reading.correction_groups[1]
         .entries[0]

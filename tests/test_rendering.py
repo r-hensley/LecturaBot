@@ -199,7 +199,7 @@ def test_duplicate_correction_uses_strikethrough_without_bold() -> None:
     assert "**~~new york~~**" not in embed.description
 
 
-def test_alias_display_is_preserved_while_target_word_is_highlighted() -> None:
+def test_annotations_and_custom_emojis_are_preserved_while_targets_highlight() -> None:
     reading = ActiveReading(
         reader_id=10,
         reader_display_name="Reader",
@@ -211,8 +211,12 @@ def test_alias_display_is_preserved_while_target_word_is_highlighted() -> None:
     reading.add_corrections(
         corrector_id=20,
         corrector_display_name="Listener",
-        items=["produce (noun)", "🍎"],
-        match_texts=["produce", "apple"],
+        items=[
+            "produce (noun)",
+            "(apple <:peepo_Pray:922638020035883058>)",
+            "(venga venga, tú puedes! :whatCat:)",
+        ],
+        match_texts=["produce", "apple", None],
         source=CorrectionSource.BUTTON,
     )
 
@@ -222,11 +226,12 @@ def test_alias_display_is_preserved_while_target_word_is_highlighted() -> None:
         "** **"
     )
     embed = build_corrections_embed(reading)
-    assert embed.title == "Correcciones / Corrections : 2"
+    assert embed.title == "Correcciones / Corrections : 3"
     assert embed.description == (
         "<@20> suggests:\n"
         "**produce (noun)**\n"
-        "**🍎**"
+        "**(apple <:peepo_Pray:922638020035883058>)**\n"
+        "**(venga venga, tú puedes! :whatCat:)**"
     )
 
 

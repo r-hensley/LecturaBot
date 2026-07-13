@@ -416,8 +416,8 @@ Observed matching behavior:
 - The dump does not prove fuzzy matching, accent normalization, whole-word rules, or how overlapping phrase matches are resolved.
 
 Those two uncertainty statements describe only the captured original-bot
-evidence. The clone's stricter validation and additional match-target rules are
-specified in section 5.4.
+evidence. The clone's exact-first, conservative fuzzy matching and free-form
+annotation rules are specified in section 5.4.
 
 ### 5.2 Correction embed metadata
 
@@ -468,27 +468,41 @@ This strikethrough treatment is a **clone enhancement**. The captured original
 summary retained duplicate attribution but did not establish discarded-entry
 markup.
 
-### 5.4 Clone enhancement: correction input and validation
+### 5.4 Clone enhancement: correction input and highlighting
 
 The clone accepts correction entries separated by newlines or top-level commas
 from both the modal and a direct reply to the active reading. Commas nested
 inside parentheses do not split an entry, and empty entries produced by blank
 lines or a trailing comma are ignored.
 
-The text shown in the correction embed is not always the literal match target:
+Parentheses preserve one complete displayed entry, including internal commas,
+a full explanatory sentence, or a custom emoji. For example,
+`(stress :peepoPray:)` remains one bold correction item. A custom emoji is
+ordinary annotation text; it is not interpreted as an alias for another word.
+
+Every parsed correction item is accepted and rendered in the summary even when
+it does not occur in the reading. Matching controls source highlighting only:
+
+- The clone tries an exact, case-insensitive match first and preserves the
+  source casing in every highlight.
+- If exact matching fails, the clone may use a conservative fuzzy match for a
+  likely typo. The result must be sufficiently strong and unambiguous.
+- If no clear match is available, the correction remains in the summary with no
+  reading-text highlight.
+
+The displayed text may therefore contain more context than its optional match
+target:
 
 - A trailing parenthetical label remains in the bold summary entry, while the
   base text before it is matched and highlighted. Thus `produce (noun)` is
   displayed as submitted but matches `produce`.
-- A supported Unicode fruit or animal emoji remains in the summary while its
-  corresponding English or Spanish word is matched in the reading. This does
-  not require Discord custom emoji syntax to be accepted.
+- A fully parenthesized annotation such as `(stress :peepoPray:)` remains
+  intact, while a recognizable exact or fuzzy source word such as `stress` may
+  supply its highlight target.
 
-Validation is atomic across one submitted batch. If any entry is unmatched,
-the clone stores and renders none of that batch. A button/modal rejection sends
-an ephemeral response that names every unmatched entry. A direct Discord
-message reply has no interaction response and therefore cannot receive an
-ephemeral error; the ephemeral-error requirement applies only to the modal.
+Per-entry length, per-reading count and character limits, and normalized
+duplicate handling still apply. They are independent of whether a source
+highlight is found.
 
 ### 5.5 Observed `discord.py` reading and correction builders
 
@@ -772,11 +786,11 @@ original bot:
 - [ ] Preserve original source casing when applying underline-plus-bold highlights.
 - [ ] Parse correction entries at newlines and top-level commas without
       splitting commas inside parentheses.
-- [ ] Keep trailing parenthetical labels and supported fruit/animal emoji in
-      correction-summary display text while highlighting their derived base or
-      English/Spanish alias match.
-- [ ] Reject an unmatched correction batch atomically; for modal submissions,
-      return one ephemeral response listing every unmatched entry.
+- [ ] Keep parenthesized labels and explanations, including commas, sentences,
+      and custom emojis, together as one correction-summary item.
+- [ ] Accept and render every parsed correction item; use exact-first,
+      conservative fuzzy matching only to determine source highlighting, and
+      leave uncertain or unmatched items unhighlighted.
 - [ ] Number active rows in upcoming-turn order: current reader `1`, next
       reader `2`, then the remainder of the rotation.
 - [ ] Show `turns` and `avg reading time` on every active member row and render

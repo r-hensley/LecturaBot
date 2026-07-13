@@ -20,6 +20,7 @@ PICKER_DESCRIPTION = (
 NO_CORRECTIONS = "Aún no hay correcciones. / No corrections yet."
 MAX_MESSAGE_CONTENT = 2_000
 MAX_EMBED_DESCRIPTION = 4_096
+_CUSTOM_EMOJI_TOKEN = re.compile(r"<a?:[A-Za-z0-9_]+:[0-9]+>")
 
 
 class RenderError(ValueError):
@@ -111,6 +112,18 @@ def _escape_user_text(value: str) -> str:
     return discord.utils.escape_mentions(discord.utils.escape_markdown(value))
 
 
+def _escape_correction_text(value: str) -> str:
+    """Escape user markup while preserving valid Discord custom emoji tokens."""
+    rendered: list[str] = []
+    last_end = 0
+    for match in _CUSTOM_EMOJI_TOKEN.finditer(value):
+        rendered.append(_escape_user_text(value[last_end : match.start()]))
+        rendered.append(match.group(0))
+        last_end = match.end()
+    rendered.append(_escape_user_text(value[last_end:]))
+    return "".join(rendered)
+
+
 def highlight_body(body: str, corrections: list[str]) -> str:
     """Highlight literal corrections longest-first without nesting markup.
 
@@ -193,9 +206,9 @@ def build_corrections_embed(reading: ActiveReading) -> discord.Embed:
     for group in reading.correction_groups:
         items = "\n".join(
             (
-                f"~~{_escape_user_text(entry.text)}~~"
+                f"~~{_escape_correction_text(entry.text)}~~"
                 if entry.discarded
-                else f"**{_escape_user_text(entry.text)}**"
+                else f"**{_escape_correction_text(entry.text)}**"
             )
             for entry in group.entries
         )

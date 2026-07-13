@@ -75,17 +75,6 @@ def parse_correction_lines(
     return items
 
 
-def _missing_corrections_message(items: list[str]) -> str:
-    listed = ", ".join(
-        f"“{item if len(item) <= 60 else item[:59] + '…'}”" for item in items
-    )
-    return (
-        "No se guardó ninguna corrección / No corrections were saved. "
-        "No se encontró en el texto / Not found in the reading: "
-        f"{listed}"
-    )
-
-
 class SessionService:
     """Coordinate queue and reading transitions for every channel pair.
 
@@ -607,22 +596,14 @@ class SessionService:
                     "El lector no puede corregirse a sí mismo. / "
                     "The reader cannot submit their own corrections.",
                 )
-            match_texts: list[str] = []
-            missing_items: list[str] = []
+            match_texts: list[str | None] = []
             for item in items:
-                match_text = find_correction_target(
-                    reading.body,
-                    item,
-                    language=reading.language.value,
-                )
-                if match_text is None:
-                    missing_items.append(item)
-                else:
-                    match_texts.append(match_text)
-            if missing_items:
-                raise SessionError(
-                    "correction_not_in_text",
-                    _missing_corrections_message(missing_items),
+                match_texts.append(
+                    find_correction_target(
+                        reading.body,
+                        item,
+                        language=reading.language.value,
+                    )
                 )
 
             seen_in_submission: set[str] = set()
@@ -632,8 +613,8 @@ class SessionService:
                 if group.user_id == corrector_id
                 for entry in group.entries
             }
-            for match_text in match_texts:
-                normalized = reading._normalize_correction(match_text)
+            for item, match_text in zip(items, match_texts, strict=True):
+                normalized = reading._normalize_correction(match_text or item)
                 if normalized in seen_in_submission or normalized in seen_by_corrector:
                     raise SessionError(
                         "duplicate_correction",
@@ -675,9 +656,19 @@ class SessionService:
             if validator is not None:
                 validator(reading)
             await self._persist_locked(state)
+            unhighlighted_count = sum(
+                match_text is None for match_text in match_texts
+            )
+            notice = "Correcciones guardadas. / Corrections saved."
+            if unhighlighted_count:
+                notice = (
+                    "Correcciones guardadas. Sin resaltar: "
+                    f"{unhighlighted_count}. / Corrections saved. Listed "
+                    f"without highlighting: {unhighlighted_count}."
+                )
             return Transition(
                 self._snapshot(state),
-                "Correcciones guardadas. / Corrections saved.",
+                notice,
             )
 
     async def pass_turn(

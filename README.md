@@ -21,9 +21,10 @@ The implementation follows the observed behavior in [EXPECTED_OPERATION.md](EXPE
 - Custom-text modal, including a language label in the Other Languages channel
 - Correction modal and reply-to-reading correction capture, with newline or
   top-level-comma separated entries
-- Case-insensitive, all-occurrence highlights that preserve the source casing,
-  including trailing parenthetical labels and supported fruit/animal emoji
-  aliases
+- Exact-first, conservative fuzzy typo matching for case-insensitive,
+  all-occurrence highlights that preserve the source casing
+- Free-form correction annotations, including parenthesized sentences and
+  custom emojis, remain listed even when no source highlight is found
 - Grouped correction attribution, with later cross-corrector duplicates struck through
 - Current-reader-only pass and a separate, fixed three-vote AFK skip action
 - Per-guild/user completed-turn totals and average reading time, reset after six
@@ -47,14 +48,18 @@ The implementation follows the observed behavior in [EXPECTED_OPERATION.md](EXPE
   refresh. Joining, leaving, selection-only passes, AFK skips, and other users'
   turns do not extend the window.
 - **Pasar turno / Pass Turn** is available only to the current reader. A separate **Saltar turno ausente / Skip AFK Turn** action requires three unique votes from queued, non-current readers; the threshold is never reduced when fewer voters are available.
-- Correction counts de-duplicate the normalized matched target. Attribution groups retain each corrector's submitted entry, but a later duplicate from another corrector is rendered as `~~struck through~~` to show that it was discarded.
-- Correction batches split at newlines and commas outside parentheses. A
-  trailing label such as `produce (noun)` remains visible in the correction
-  summary while `produce` is matched and highlighted. Supported Unicode fruit
-  and animal emoji may abbreviate the corresponding English or Spanish word.
-  Modal submissions are atomic: if any entry is unmatched, none are stored and
-  an ephemeral response lists every unmatched entry. Ordinary message replies
-  cannot receive an ephemeral response.
+- Correction counts de-duplicate the normalized match target when one exists,
+  otherwise the submitted text. Attribution groups retain each corrector's
+  entry, but a later duplicate from another corrector is rendered as
+  `~~struck through~~` to show that it was discarded.
+- Correction submissions split at newlines and commas outside parentheses.
+  Parentheses preserve one complete annotation even when it contains commas,
+  a sentence, or a custom emoji; for example, `(stress :peepoPray:)` remains
+  one displayed correction. Every parsed entry is listed whether or not it
+  appears in the reading. Matching only controls highlighting: the bot tries an
+  exact match first, then a conservative fuzzy match for likely typos, and
+  leaves uncertain or unmatched comments unhighlighted. Emojis remain ordinary
+  annotation text rather than aliases for words.
 - Native-language correction eligibility remains a community rule; the POC does not yet enforce language roles.
 - Correctors do not need to enter the reader queue, but they must be present in the matching voice channel.
 - Queue panels are capped at 25 participants. A reading stores at most 20 correction entries and 1,400 raw correction characters so Discord's message/embed limits cannot strand an active turn.
@@ -81,8 +86,8 @@ The implementation follows the observed behavior in [EXPECTED_OPERATION.md](EXPE
   - Message Content Intent
 
 Message Content Intent is required for reply-based corrections. The correction
-button and modal still work independently and are the only path that can return
-private, ephemeral correction-validation errors.
+button and modal still work independently and can return private, ephemeral
+errors for submission limits or an invalid reading state.
 
 ## Configuration
 
