@@ -1,7 +1,7 @@
 # LecturaBot Expected Operation and Required Features
 
-**Status:** Discovery draft 0.5
-**Last updated:** 2026-07-11
+**Status:** Discovery draft 0.6
+**Last updated:** 2026-07-13
 **Project basis:** Authorized behavioral reimplementation of a closed-source bot, with the original bot owner's permission.
 
 This is a living specification assembled from user explanations, copied channel output, screenshots, and later clarifications. It describes expected behavior, not a chosen technical design. When the evidence is incomplete, the uncertainty is recorded rather than silently converted into a requirement.
@@ -64,7 +64,9 @@ The supplied instructions ask people to correct only readers who are reading in 
 16. The bot publishes a fresh, numbered queue panel for the new turn so the
     rotation and updated statistics remain visible.
 
-If nobody remains, the queue displays **Vacío / Empty**.
+If nobody remains, the queue displays **Vacío / Empty** and that room session
+ends. A later entrant begins a new session with reset session-scoped catalog
+history.
 
 The POC temporarily exposes this workflow through `/lecturatest` so it can run
 beside the original bot without colliding with `/queue` or `/cola`. The command
@@ -144,6 +146,12 @@ Observed behavior includes:
 - **Visible statistics:** Every numbered member row includes `turns` and
   `avg reading time`. A normal completed reading updates those values before
   the next turn's fresh queue panel is published.
+- **Room-session lifetime:** A room session remains active while at least one
+  participant remains queued, including while it is paused below the
+  two-participant minimum. Its state survives a bot restart. A temporary
+  leave/rejoin does not erase that user's session-scoped catalog history unless
+  the departure makes the queue empty. An empty queue ends and resets the room
+  session.
 
 ### Original-bot queue behavior still to confirm
 
@@ -154,8 +162,11 @@ Observed behavior includes:
   or voice channel. The clone behavior is specified above.
 - Whether the original status was one edited message or a new status message
   on every transition. The clone must publish fresh panels as specified above.
-- Whether `/queue` creates a new session, retrieves a persistent channel-specific session, or only posts the controls for existing state.
-- How a session is closed and when an abandoned or empty session expires.
+- Whether the original `/queue` created a new session, retrieved a persistent
+  channel-specific session, or only posted controls for existing state. The
+  clone's room-session lifetime is specified above.
+- How the original bot closed or expired an abandoned or empty session. The
+  clone ends its room session as soon as the queue becomes empty.
 - Whether all six channel pairs can run sessions simultaneously. The channel layout implies that their state must at least be isolated from one another.
 - What happens if **Start Reading** is pressed with fewer than two eligible participants.
 - Whether every participant must press **Start Reading**, only one participant starts the session, or the control means something turn-specific.
@@ -244,6 +255,19 @@ availability.
 The original 12 POC passages remain a separate seed, giving the packaged catalog
 1,027 total passages. Startup inserts both seed files idempotently into SQLite.
 
+### Clone requirements from live POC testing
+
+- Catalog repeat prevention is per reader, not global. One reader receiving a
+  passage does not prevent another reader from receiving it.
+- Within one room session, a reader must not receive the same catalog passage
+  more than once. This history applies across languages and levels by catalog
+  text identity and survives bot restarts and a temporary leave/rejoin.
+- Pausing below two participants does not reset the history. The history resets
+  only when the room queue becomes empty and the session ends.
+- Exhaustion is strict. If that reader has used every passage in the selected
+  language/level during the session, the bot must not clear or cycle the used
+  set; it directs the reader to another level or a custom text instead.
+
 ### Text behavior still to confirm
 
 - Whether language and difficulty are selected together or in separate steps.
@@ -254,7 +278,8 @@ The original 12 POC passages remain a separate seed, giving the packaged catalog
 - Maximum and minimum text length.
 - Whether custom texts become reusable catalog entries.
 - How catalog texts are chosen within a level: random, sequential, weighted, or user-selected.
-- Whether recently used texts are excluded to avoid repetition.
+- Whether the original bot excluded recently used texts. The clone's
+  session-scoped, per-reader rule is specified above.
 - What metadata is stored for a catalog text beyond language, level, body, and optional expected emotion.
 - How users report an unsuitable or broken text.
 
@@ -295,7 +320,9 @@ Observed behavior includes:
 - The displayed total appears to count unique correction strings across correctors. Identical entries such as `serious` contribute once to the total even when shown under two correctors. Small textual differences, including spelling or punctuation, appear capable of producing separate entries. This counting rule is inferred from the examples and needs direct confirmation.
 - Free-form pronunciation explanations and phonetic approximations also appear as ordinary human chat messages after the bot summary. There is no evidence yet that the bot parses or stores those follow-up messages.
 
-### Clone requirement for duplicate corrections
+### Clone requirements from live POC testing
+
+#### Duplicate corrections
 
 The first normalized occurrence of a correction remains accepted. If a
 different corrector later submits the same normalized word or phrase, the
@@ -312,15 +339,35 @@ count and does not create an additional text highlight. This strikethrough is a
 clone enhancement requested after live testing, not metadata observed in the
 original channel export.
 
-### Correction behavior still to confirm
+#### Parsing, matching, and validation
 
-- What the **Add Corrections** button opens and what input format it accepts.
-- How a button-submitted correction is associated with the active reader and reading post.
-- How reply text is parsed into one or more correction entries.
-- The behavioral difference between the button and reply paths. Earlier instructions specifically associate replies with displaying or highlighting corrections in the selected text.
-- How the bot visually highlights a correction inside the original text.
-- Whether matching is case-sensitive, accent-sensitive, punctuation-sensitive, or token-based.
-- Whether correcting phrases that occur multiple times highlights every occurrence or a selected occurrence.
+- Both correction paths accept entries separated by a newline or by a
+  top-level comma. Empty entries, including one created by a trailing comma,
+  are ignored. A comma inside parentheses remains part of its entry.
+- A direct reply to the active reading post is parsed and submitted as
+  corrections for that reading; it is not merely ordinary conversation.
+- A trailing parenthetical label is display-only for matching. For example,
+  `produce (noun)` remains exactly that text in the correction summary while
+  the base word `produce` is matched and highlighted in the reading.
+- A supported Unicode fruit or animal emoji can abbreviate the corresponding
+  English or Spanish name. The submitted emoji remains visible in the
+  correction summary while the matched source word is highlighted. Discord
+  custom emoji syntax is not implied by this requirement.
+- A submitted correction batch is atomic. If one or more entries do not match
+  the reading, none of the batch is stored or rendered.
+- For a button/modal submission, the rejection response is ephemeral and lists
+  every unmatched entry in that batch, not only the first one.
+- A normal message reply has no interaction response through which the bot can
+  send an ephemeral error. Reply corrections use the same parsing and matching
+  rules, but the private error-list guarantee applies only to the modal path.
+
+### Original-bot correction behavior still to confirm
+
+- The original modal's fields, limits, validation, and response copy. The clone
+  input and atomic-error behavior is specified above.
+- How the original bot parsed reply text and handled unmatched reply entries.
+- Whether original matching was accent-sensitive, fuzzy, or token-based.
+- How the original handled overlapping phrases or competing match targets.
 - Whether a corrector can edit or delete a submitted correction.
 - When correction submission closes.
 - Whether the reader can pass before reviewing every correction or the instruction is advisory.
@@ -414,6 +461,7 @@ This is a behavioral inventory, not a database-schema decision.
 - Current reader
 - Current-turn state and timestamps
 - Skip votes
+- Session lifecycle state, including empty-queue termination
 - Configured support contacts
 - Optional reading-session notification role
 
@@ -421,6 +469,8 @@ This is a behavioral inventory, not a database-schema decision.
 
 - Discord user identity
 - Queue position
+- Catalog text identities already used by this reader in the current room
+  session
 - Completed-turn count
 - Accumulated or average turn time
 - Possibly native and learning languages
@@ -442,6 +492,8 @@ This is a behavioral inventory, not a database-schema decision.
 - Reading-post identity
 - Turn timestamps and outcome
 - Correction text
+- Display text and derived match target when a parenthetical label or emoji
+  alias is used
 - Corrector identity
 - Submission order
 - Accepted or discarded-duplicate status
@@ -467,12 +519,20 @@ The reimplementation is presently expected to need:
 - Numbered active queues in upcoming-turn order, with the current reader at
   position `1` and the next reader at position `2`.
 - A Spanish-English text catalog with difficulty selection.
+- Per-reader catalog no-repeat history lasting for one room session, persisted
+  across restart and temporary leave/rejoin, with strict exhaustion rather than
+  automatic recycling.
 - A current-reader text picker.
 - A custom-text submission path, including for languages outside English and Spanish.
 - Reading-post rendering with optional metadata.
-- **Add Corrections** and reply-associated correction capture.
+- **Add Corrections** and reply-associated correction capture, accepting
+  newline and top-level-comma separated entries.
 - Correction attribution, aggregation, counting, text highlighting, and
-  strikethrough rendering of later cross-corrector duplicates.
+  strikethrough rendering of later cross-corrector duplicates, including
+  display-only trailing parenthetical labels and English/Spanish fruit or
+  animal emoji aliases.
+- Atomic correction validation, with an ephemeral modal error that lists every
+  unmatched entry and no promise of ephemeral errors for direct replies.
 - Visible completed-turn and average-time tracking, updated before the next
   turn panel is published.
 - An empty-queue state.
@@ -493,12 +553,13 @@ The most useful future examples would show:
 4. A complete text-selection interaction at every available difficulty.
 5. How **Hard**, **Super Hard**, and Halloween texts appear in the bot picker.
 6. The **Your Own Text** / **Mi propio texto** submission flow, including use in another language.
-7. The interface opened by **Add Corrections**.
-8. A reply correction being submitted and the bot message changing afterward.
-9. A highlighted correction inside a reading text.
+7. The original interface opened by **Add Corrections**.
+8. An original-bot reply correction being submitted and the bot message
+   changing afterward.
+9. An original-bot highlighted correction inside a reading text.
 10. A reader pressing **Pass Turn**.
 11. Several people voting to skip an AFK reader.
-12. Session shutdown or expiration after a queue becomes empty.
+12. Original-bot session shutdown or expiration after a queue becomes empty.
 13. Behavior when the command is used from the wrong text channel or without joining voice.
 14. Any administrator or text-database management commands.
 
@@ -552,3 +613,17 @@ The most useful future examples would show:
   discarded.
 - Confirmed that newly completed reading statistics must be visible on the
   fresh panel published for the next turn.
+
+### Batch 7: Correction parsing and catalog-repeat feedback
+
+- Required replies to the active reading to submit comma- or newline-separated
+  corrections, while preserving commas inside parentheses.
+- Required trailing parenthetical labels to remain visible but match their base
+  text, and supported Unicode fruit/animal emoji to abbreviate English or
+  Spanish match words.
+- Required correction batches to reject atomically. Modal rejections are
+  ephemeral and list every unmatched entry; ordinary reply events cannot return
+  ephemeral errors.
+- Required per-reader catalog no-repeat history for one room session, persisted
+  across restart and temporary leave/rejoin, reset on an empty queue, with no
+  automatic recycling after a reader exhausts a language/level.

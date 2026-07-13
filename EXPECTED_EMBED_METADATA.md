@@ -1,7 +1,7 @@
 # LecturaBot Expected Embed Metadata and `discord.py` Templates
 
-**Status:** Discovery draft 0.2
-**Last updated:** 2026-07-11
+**Status:** Discovery draft 0.3
+**Last updated:** 2026-07-13
 **Target library:** `discord.py` 2.7.1, matching the configured local Python environment
 **Companion document:** [Expected operation and required features](EXPECTED_OPERATION.md)
 
@@ -407,6 +407,10 @@ Observed matching behavior:
 - An unmatched or misspelled suggestion can remain in the correction summary without appearing as a source highlight.
 - The dump does not prove fuzzy matching, accent normalization, whole-word rules, or how overlapping phrase matches are resolved.
 
+Those two uncertainty statements describe only the captured original-bot
+evidence. The clone's stricter validation and additional match-target rules are
+specified in section 5.4.
+
 ### 5.2 Correction embed metadata
 
 | Property | Expected value |
@@ -456,7 +460,29 @@ This strikethrough treatment is a **clone enhancement**. The captured original
 summary retained duplicate attribution but did not establish discarded-entry
 markup.
 
-### 5.4 Observed `discord.py` reading and correction builders
+### 5.4 Clone enhancement: correction input and validation
+
+The clone accepts correction entries separated by newlines or top-level commas
+from both the modal and a direct reply to the active reading. Commas nested
+inside parentheses do not split an entry, and empty entries produced by blank
+lines or a trailing comma are ignored.
+
+The text shown in the correction embed is not always the literal match target:
+
+- A trailing parenthetical label remains in the bold summary entry, while the
+  base text before it is matched and highlighted. Thus `produce (noun)` is
+  displayed as submitted but matches `produce`.
+- A supported Unicode fruit or animal emoji remains in the summary while its
+  corresponding English or Spanish word is matched in the reading. This does
+  not require Discord custom emoji syntax to be accepted.
+
+Validation is atomic across one submitted batch. If any entry is unmatched,
+the clone stores and renders none of that batch. A button/modal rejection sends
+an ephemeral response that names every unmatched entry. A direct Discord
+message reply has no interaction response and therefore cannot receive an
+ephemeral error; the ephemeral-error requirement applies only to the modal.
+
+### 5.5 Observed `discord.py` reading and correction builders
 
 ```python
 from collections.abc import Iterable
@@ -705,13 +731,15 @@ These checks come from the behavioral workflow, not from the embed payload.
 
 ## 8. Metadata not present in this dump
 
-Do not invent these details until later evidence is supplied:
+Do not invent these original-bot details until later evidence is supplied.
+Clone-only decisions already stated in this document are not claims about the
+original bot:
 
 - The response produced by `Instrucciones / Instructions`
 - Modal title, fields, placeholders, lengths, and validation for custom texts
-- Modal or interaction schema for correction submission
-- Ephemeral versus public interaction responses
-- Loading, success, rejection, and error messages
+- The original modal or interaction schema for correction submission
+- The original bot's ephemeral versus public interaction responses
+- The original bot's loading, success, rejection, and error messages
 - Disabled-button states during or after processing
 - Empty correction-summary behavior
 - Whether completed reading controls are removed, disabled, or left active
@@ -734,6 +762,13 @@ Do not invent these details until later evidence is supplied:
 - [ ] Preserve bold accepted correction entries and blank lines between
       correctors; render later cross-corrector duplicates as `~~struck through~~`.
 - [ ] Preserve original source casing when applying underline-plus-bold highlights.
+- [ ] Parse correction entries at newlines and top-level commas without
+      splitting commas inside parentheses.
+- [ ] Keep trailing parenthetical labels and supported fruit/animal emoji in
+      correction-summary display text while highlighting their derived base or
+      English/Spanish alias match.
+- [ ] Reject an unmatched correction batch atomically; for modal submissions,
+      return one ephemeral response listing every unmatched entry.
 - [ ] Number active rows in upcoming-turn order: current reader `1`, next
       reader `2`, then the remainder of the rotation.
 - [ ] Show `turns` and `avg reading time` on every active member row and render

@@ -19,14 +19,18 @@ The implementation follows the observed behavior in [EXPECTED_OPERATION.md](EXPE
 - Explicit two-participant start gate
 - Beginner, Intermediate, and Advanced catalog choices backed by 1,027 bundled English and Spanish passages
 - Custom-text modal, including a language label in the Other Languages channel
-- Correction modal and reply-to-reading correction capture
-- Case-insensitive, all-occurrence highlights that preserve the source casing
+- Correction modal and reply-to-reading correction capture, with newline or
+  top-level-comma separated entries
+- Case-insensitive, all-occurrence highlights that preserve the source casing,
+  including trailing parenthetical labels and supported fruit/animal emoji
+  aliases
 - Grouped correction attribution, with later cross-corrector duplicates struck through
 - Current-reader-only pass and a separate, fixed three-vote AFK skip action
 - Guild/user completed-turn totals and average reading time
 - Numbered queue panels in upcoming-turn order, republished after departures and turn changes
 - SQLite-backed catalog, statistics, and versioned active-session snapshots
 - Startup reconciliation of voice membership and persisted Discord controls
+- Restart-safe, per-reader catalog no-repeat history for each room session
 - Per-room serialization across state changes and Discord message publication
 - Strict TOML configuration with the Discord token accepted only from an environment variable
 
@@ -37,11 +41,23 @@ The implementation follows the observed behavior in [EXPECTED_OPERATION.md](EXPE
 - A session pauses when fewer than two queued voice participants remain. It must be started again after the second participant returns.
 - Reading time runs from publication of the reading text until a normal current-reader pass. Selection time, skipped turns, and disconnected turns do not affect statistics.
 - **Pasar turno / Pass Turn** is available only to the current reader. A separate **Saltar turno ausente / Skip AFK Turn** action requires three unique votes from queued, non-current readers; the threshold is never reduced when fewer voters are available.
-- Correction counts de-duplicate normalized correction text. Attribution groups retain each corrector's submitted entry, but a later duplicate from another corrector is rendered as `~~struck through~~` to show that it was discarded.
+- Correction counts de-duplicate the normalized matched target. Attribution groups retain each corrector's submitted entry, but a later duplicate from another corrector is rendered as `~~struck through~~` to show that it was discarded.
+- Correction batches split at newlines and commas outside parentheses. A
+  trailing label such as `produce (noun)` remains visible in the correction
+  summary while `produce` is matched and highlighted. Supported Unicode fruit
+  and animal emoji may abbreviate the corresponding English or Spanish word.
+  Modal submissions are atomic: if any entry is unmatched, none are stored and
+  an ephemeral response lists every unmatched entry. Ordinary message replies
+  cannot receive an ephemeral response.
 - Native-language correction eligibility remains a community rule; the POC does not yet enforce language roles.
 - Correctors do not need to enter the reader queue, but they must be present in the matching voice channel.
 - Queue panels are capped at 25 participants. A reading stores at most 20 correction entries and 1,400 raw correction characters so Discord's message/embed limits cannot strand an active turn.
 - Custom texts are turn-local and are not added to the reusable catalog.
+- Catalog no-repeat history is tracked independently for each reader during one
+  room session. It survives a bot restart and a temporary leave/rejoin while
+  the session remains active. An empty queue ends the session and resets that
+  history. Exhausting a language/level is strict: the bot directs that reader
+  to another level or a custom text instead of repeating a passage.
 
 ## Prerequisites
 
@@ -58,7 +74,9 @@ The implementation follows the observed behavior in [EXPECTED_OPERATION.md](EXPE
   - Server Members Intent
   - Message Content Intent
 
-Message Content Intent is required for reply-based corrections. The correction button and modal still work independently.
+Message Content Intent is required for reply-based corrections. The correction
+button and modal still work independently and are the only path that can return
+private, ephemeral correction-validation errors.
 
 ## Configuration
 

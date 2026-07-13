@@ -54,6 +54,11 @@ still active.
 
 Each room's queue can contain up to 25 people.
 
+A room session continues while at least one person remains in its queue. It
+survives a bot restart and may pause when fewer than two people remain. When the
+queue becomes completely empty, that session ends; the next person to enter
+starts a new room session.
+
 ### Choose what to read
 
 When it is your turn, the bot mentions you and displays the text picker.
@@ -66,6 +71,14 @@ Catalog choices are available in both languages:
 The shared catalog is bundled with the bot from the community reading-text
 document, so choosing a passage does not open Google Docs or require an external
 link.
+
+Within one room session, the bot does not give the same catalog passage to the
+same reader twice. Each reader has independent history, so another reader may
+still receive that passage. Your history survives a bot restart and a temporary
+leave/rejoin as long as somebody keeps the room session alive. If you use every
+passage in one language/level, the bot does not start repeating them; choose
+another level or submit your own text. The history resets only after the room's
+queue becomes empty and the session ends.
 
 To bring your own passage, choose one of these instead:
 
@@ -92,19 +105,30 @@ corrections to their own reading.
 Use either method:
 
 1. Click **Poner Correcciones / Submit Corrections** on the reading message.
-   Enter one corrected word or phrase per line.
-2. Reply directly to the bot's reading message. Each non-empty line in your
-   reply is treated as a separate correction.
+   Separate corrected words or phrases with newlines or commas.
+2. Reply directly to the bot's reading message. Newlines and commas also
+   separate the corrections in your reply.
+
+Only commas outside parentheses separate entries. For example,
+`vegetables, produce (noun), baked` is three corrections, while a comma inside
+`produce (noun, uncountable)` remains part of that one entry. A trailing comma
+is allowed.
 
 Each correction can contain up to 100 characters. A reading can hold up to 20
-correction entries and 1,400 correction characters in total. If a reply is not
-accepted, the bot does not post a public error; use the correction button to
-receive a private explanation.
+correction entries and 1,400 correction characters in total. Every entry in a
+batch must match the passage. If one or more entries submitted through the
+modal do not match, the bot adds none of the batch and sends an ephemeral
+message listing every unmatched entry. Correct the list and submit it again.
+An ordinary Discord message reply cannot receive an ephemeral response, so use
+the correction button when you need private validation details.
 
 The bot groups corrections by corrector. When a submitted word or phrase
 matches the passage, the bot highlights every occurrence without changing the
-passage's capitalization. Spelling and punctuation matter; unmatched
-suggestions remain in the correction list but are not highlighted. If another
+passage's capitalization. A trailing parenthetical label remains visible in the
+correction list but is excluded from matching: `produce (noun)` highlights
+`produce`. A supported Unicode fruit or animal emoji may abbreviate a matching
+English or Spanish name in the passage; for example, `🍎` may highlight `apple`
+or `manzana`, while the correction list continues to show `🍎`. If another
 corrector later submits a word or phrase that has already been suggested, the
 later duplicate remains attributed to that corrector but appears as
 `~~struck through~~` to show that it was discarded.
@@ -131,8 +155,9 @@ verify native-language roles.
 After any normal pass, successful AFK skip, or current-reader departure, the
 bot publishes a fresh queue panel for the new turn.
 
-If the queue falls below two people, the session pauses. Once enough people
-return, a queued participant must press **Start Reading** again.
+If the queue falls below two people but is not empty, the session pauses. Once
+enough people return, a queued participant must press **Start Reading** again.
+If the queue becomes empty, the session ends instead.
 
 ### Queue statistics
 
@@ -159,6 +184,8 @@ updated statistics appear in the fresh queue panel for the next turn.
 | You already voted | Your skip vote was recorded and cannot be submitted twice. |
 | An AFK skip does not advance | Three different queued, non-current readers are required; the threshold is not reduced. |
 | The correction list is full | Give any remaining pronunciation feedback aloud in the voice channel. |
+| One or more modal corrections were not found | Read the private list of every unmatched entry, correct them, and resubmit the whole batch. |
+| No unused catalog text remains at this level | Choose another level or submit your own text; the bot will not repeat a passage for you in the same room session. |
 | Catalog choices fail in Other Languages | Use **Your own text** and provide the language name. |
 
 Queue panels identify separate contacts for **Bot not working?** and **Found a
@@ -211,6 +238,11 @@ original siga activo.
 
 La cola de cada sala puede contener hasta 25 personas.
 
+La sesión de una sala continúa mientras quede al menos una persona en la cola.
+Sobrevive a un reinicio del bot y puede pausarse cuando quedan menos de dos
+personas. Cuando la cola queda completamente vacía, la sesión termina; la
+próxima persona que entre iniciará una sesión nueva en esa sala.
+
 ### Elige qué leer
 
 Cuando sea tu turno, el bot te mencionará y mostrará el selector de textos.
@@ -223,6 +255,14 @@ El catálogo ofrece tres niveles en ambos idiomas:
 El catálogo compartido está incluido dentro del bot a partir del documento
 comunitario de textos; elegir un texto no abre Google Docs ni requiere un enlace
 externo.
+
+Durante una sesión de sala, el bot no entrega dos veces el mismo texto del
+catálogo al mismo lector. Cada lector tiene un historial independiente, así que
+otra persona sí puede recibir ese texto. Tu historial sobrevive a un reinicio
+del bot y a una salida y reentrada temporal, siempre que alguien mantenga viva
+la sesión de la sala. Si agotas todos los textos de un idioma y nivel, el bot no
+vuelve a empezar la lista: elige otro nivel o proporciona tu propio texto. El
+historial solo se reinicia cuando la cola queda vacía y termina la sesión.
 
 Para usar tu propio texto, elige:
 
@@ -249,22 +289,34 @@ su propia lectura.
 Puedes usar cualquiera de estos métodos:
 
 1. Pulsa **Poner Correcciones / Submit Corrections** en el mensaje de lectura.
-   Escribe una palabra o frase corregida por línea.
-2. Responde directamente al mensaje de lectura del bot. Cada línea no vacía de
-   tu respuesta se considera una corrección separada.
+   Separa las palabras o frases corregidas con saltos de línea o comas.
+2. Responde directamente al mensaje de lectura del bot. Los saltos de línea y
+   las comas también separan las correcciones de tu respuesta.
+
+Solo las comas que estén fuera de paréntesis separan entradas. Por ejemplo,
+`vegetables, produce (sustantivo), baked` contiene tres correcciones, mientras
+que la coma de `produce (sustantivo, incontable)` sigue formando parte de una
+sola entrada. Se permite una coma final.
 
 Cada corrección puede tener hasta 100 caracteres. Una lectura puede contener
-un máximo total de 20 correcciones y 1.400 caracteres de corrección. Si el bot
-no acepta una respuesta, no publicará un error en el canal; usa el botón de
-correcciones para recibir una explicación privada.
+un máximo total de 20 correcciones y 1.400 caracteres de corrección. Todas las
+entradas de un lote deben coincidir con el texto. Si una o más entradas enviadas
+mediante el formulario no coinciden, el bot no añade ninguna del lote y te
+envía una respuesta efímera con la lista completa de entradas no encontradas.
+Corrige la lista y vuelve a enviarla. Una respuesta normal a un mensaje de
+Discord no puede recibir una respuesta efímera; usa el botón de correcciones si
+necesitas los detalles de validación en privado.
 
 El bot agrupa las correcciones por corrector. Cuando una palabra o frase
 coincide con el texto, el bot destaca todas sus apariciones sin cambiar las
-mayúsculas del texto original. La ortografía y la puntuación importan; una
-sugerencia que no coincida seguirá apareciendo en la lista de correcciones,
-pero no será destacada en el texto. Si otro corrector envía después una palabra
-o frase que ya había sido sugerida, la corrección posterior seguirá atribuida
-a esa persona, pero aparecerá `~~tachada~~` para indicar que fue descartada.
+mayúsculas del texto original. Una etiqueta final entre paréntesis continúa
+visible en la lista, pero no forma parte de la búsqueda: `produce (sustantivo)`
+destaca `produce`. Un emoji Unicode compatible de fruta o animal puede abreviar
+un nombre coincidente en inglés o español; por ejemplo, `🍎` puede destacar
+`apple` o `manzana`, mientras la lista de correcciones sigue mostrando `🍎`. Si
+otro corrector envía después una palabra o frase que ya había sido sugerida, la
+corrección posterior seguirá atribuida a esa persona, pero aparecerá
+`~~tachada~~` para indicar que fue descartada.
 
 Envía correcciones solamente cuando el lector esté practicando tu idioma
 nativo. Esta es una regla de la comunidad, aunque el bot todavía no comprueba
@@ -289,9 +341,9 @@ Después de un turno pasado normalmente, un voto AFK completado o la salida del
 lector actual, el bot publicará un panel nuevo de la cola para el siguiente
 turno.
 
-Si quedan menos de dos personas en la cola, la sesión se pausa. Cuando vuelva a
-haber suficientes personas, alguien de la cola deberá pulsar **Start Reading**
-otra vez.
+Si quedan menos de dos personas en la cola, pero no está vacía, la sesión se
+pausa. Cuando vuelva a haber suficientes personas, alguien de la cola deberá
+pulsar **Start Reading** otra vez. Si la cola queda vacía, la sesión termina.
 
 ### Estadísticas de la cola
 
@@ -319,6 +371,8 @@ estadísticas actualizadas aparecerán en el panel nuevo del siguiente turno.
 | Ya votaste | Tu voto fue registrado y no puedes enviarlo dos veces. |
 | Un salto AFK no avanza | Se necesitan tres lectores distintos que estén en la cola y no sean el lector actual; el requisito no se reduce. |
 | La lista de correcciones está llena | Comparte en voz cualquier corrección adicional. |
+| El formulario no encontró una o más correcciones | Lee la lista privada completa, corrige las entradas y vuelve a enviar todo el lote. |
+| No queda ningún texto sin usar en ese nivel | Elige otro nivel o proporciona tu propio texto; el bot no repetirá un texto para ti durante la misma sesión de sala. |
 | Las opciones del catálogo fallan en Other Languages | Usa **Your own text** e indica el nombre del idioma. |
 
 Los paneles de la cola muestran contactos distintos para **Bot not working?** y
