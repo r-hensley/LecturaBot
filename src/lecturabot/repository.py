@@ -13,12 +13,14 @@ import asyncio
 import json
 from pathlib import Path
 import sqlite3
+import time
 from typing import Any
 
 from .models import Language, Level, ReadingText, SessionState
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+STATISTICS_INACTIVITY_SECONDS = 6 * 60 * 60
 
 
 class RepositoryError(RuntimeError):
@@ -60,7 +62,7 @@ class SQLiteRepository:
                     f"{existing_version} is newer than supported version "
                     f"{SCHEMA_VERSION}"
                 )
-            if existing_version not in (0, SCHEMA_VERSION):
+            if existing_version not in (0, 1, SCHEMA_VERSION):
                 raise RepositoryError(
                     f"no migration is available from schema {existing_version} "
                     f"to {SCHEMA_VERSION}"
@@ -88,6 +90,11 @@ class SQLiteRepository:
                     turns INTEGER NOT NULL DEFAULT 0 CHECK (turns >= 0),
                     total_seconds INTEGER NOT NULL DEFAULT 0
                         CHECK (total_seconds >= 0),
+                    last_completed_at INTEGER
+                        CHECK (
+                            last_completed_at IS NULL
+                            OR last_completed_at >= 0
+                        ),
                     PRIMARY KEY (guild_id, user_id)
                 );
 
@@ -106,9 +113,32 @@ class SQLiteRepository:
                 ON reading_texts (language, level, enabled);
                 """
             )
-            if existing_version == 0:
+            user_stats_columns = {
+                str(column["name"])
+                for column in connection.execute("PRAGMA table_info(user_stats)")
+            }
+            if "last_completed_at" not in user_stats_columns:
+                if existing_version >= SCHEMA_VERSION:
+                    raise RepositoryError(
+                        "database schema is missing user_stats.last_completed_at"
+                    )
+                connection.execute(
+                    "ALTER TABLE user_stats ADD COLUMN last_completed_at INTEGER "
+                    "CHECK (last_completed_at IS NULL OR last_completed_at >= 0)"
+                )
+            if existing_version < SCHEMA_VERSION:
+                # Legacy totals have no completion timestamp, so their recency
+                # cannot be reconstructed. Start every user's inactivity
+                # window fresh instead of presenting lifetime data as current.
+                connection.execute(
+                    "UPDATE user_stats SET turns = 0, total_seconds = 0, "
+                    "last_completed_at = NULL"
+                )
                 connection.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
             connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
         finally:
             connection.close()
 
@@ -221,24 +251,80 @@ class SQLiteRepository:
                 f"invalid session snapshot for text channel {text_channel_id}"
             ) from error
 
-    async def get_user_stats(self, guild_id: int, user_id: int) -> tuple[int, int]:
-        return self._get_user_stats_sync(guild_id, user_id)
+    async def get_user_stats(
+        self,
+        guild_id: int,
+        user_id: int,
+        *,
+        at_timestamp: int | None = None,
+    ) -> tuple[int, int]:
+        statistics = self._get_user_stats_for_users_sync(
+            guild_id,
+            (user_id,),
+            self._timestamp(at_timestamp),
+        )
+        return statistics[user_id]
 
-    def _get_user_stats_sync(self, guild_id: int, user_id: int) -> tuple[int, int]:
+    async def get_user_stats_for_users(
+        self,
+        guild_id: int,
+        user_ids: list[int] | tuple[int, ...] | set[int],
+        *,
+        at_timestamp: int | None = None,
+    ) -> dict[int, tuple[int, int]]:
+        """Return effective statistics for several users in one SQLite read."""
+        normalized_ids = tuple(dict.fromkeys(int(user_id) for user_id in user_ids))
+        return self._get_user_stats_for_users_sync(
+            guild_id,
+            normalized_ids,
+            self._timestamp(at_timestamp),
+        )
+
+    def _get_user_stats_for_users_sync(
+        self,
+        guild_id: int,
+        user_ids: tuple[int, ...],
+        at_timestamp: int,
+    ) -> dict[int, tuple[int, int]]:
+        if not user_ids:
+            return {}
         connection = self._connect()
         try:
-            row = connection.execute(
-                """
-                SELECT turns, total_seconds FROM user_stats
-                WHERE guild_id = ? AND user_id = ?
+            placeholders = ", ".join("?" for _ in user_ids)
+            rows = connection.execute(
+                f"""
+                SELECT user_id, turns, total_seconds, last_completed_at
+                FROM user_stats
+                WHERE guild_id = ? AND user_id IN ({placeholders})
                 """,
-                (guild_id, user_id),
-            ).fetchone()
-            if row is None:
-                return 0, 0
-            return int(row["turns"]), int(row["total_seconds"])
+                (guild_id, *user_ids),
+            ).fetchall()
+            rows_by_user = {int(row["user_id"]): row for row in rows}
+            return {
+                user_id: self._effective_statistics(
+                    rows_by_user.get(user_id),
+                    at_timestamp,
+                )
+                for user_id in user_ids
+            }
         finally:
             connection.close()
+
+    @staticmethod
+    def _effective_statistics(
+        row: sqlite3.Row | None,
+        at_timestamp: int,
+    ) -> tuple[int, int]:
+        if row is None or row["last_completed_at"] is None:
+            return 0, 0
+        last_completed_at = int(row["last_completed_at"])
+        if at_timestamp - last_completed_at >= STATISTICS_INACTIVITY_SECONDS:
+            return 0, 0
+        return int(row["turns"]), int(row["total_seconds"])
+
+    @staticmethod
+    def _timestamp(value: int | None) -> int:
+        return max(0, int(time.time()) if value is None else int(value))
 
     async def record_completed_turn(
         self,
@@ -246,12 +332,15 @@ class SQLiteRepository:
         guild_id: int,
         user_id: int,
         duration_seconds: int,
+        completed_at: int | None = None,
     ) -> tuple[int, int]:
+        timestamp = self._timestamp(completed_at)
         async with self._write_lock:
             return self._record_completed_turn_sync(
                 guild_id,
                 user_id,
                 max(0, duration_seconds),
+                timestamp,
             )
 
     def _record_completed_turn_sync(
@@ -259,31 +348,20 @@ class SQLiteRepository:
         guild_id: int,
         user_id: int,
         duration_seconds: int,
+        completed_at: int,
     ) -> tuple[int, int]:
         connection = self._connect()
         try:
             connection.execute("BEGIN IMMEDIATE")
-            connection.execute(
-                """
-                INSERT INTO user_stats (guild_id, user_id, turns, total_seconds)
-                VALUES (?, ?, 1, ?)
-                ON CONFLICT(guild_id, user_id) DO UPDATE SET
-                    turns = turns + 1,
-                    total_seconds = total_seconds + excluded.total_seconds
-                """,
-                (guild_id, user_id, duration_seconds),
+            statistics = self._upsert_completed_turn_sync(
+                connection,
+                guild_id=guild_id,
+                user_id=user_id,
+                duration_seconds=duration_seconds,
+                completed_at=completed_at,
             )
-            row = connection.execute(
-                """
-                SELECT turns, total_seconds FROM user_stats
-                WHERE guild_id = ? AND user_id = ?
-                """,
-                (guild_id, user_id),
-            ).fetchone()
             connection.commit()
-            if row is None:
-                raise RepositoryError("completed-turn statistics were not persisted")
-            return int(row["turns"]), int(row["total_seconds"])
+            return statistics
         except Exception:
             connection.rollback()
             raise
@@ -296,15 +374,18 @@ class SQLiteRepository:
         state: SessionState,
         user_id: int,
         duration_seconds: int,
+        completed_at: int | None = None,
     ) -> tuple[int, int]:
         """Atomically record one completed turn and its resulting session."""
         state.validate()
         next_revision = state.revision + 1
+        timestamp = self._timestamp(completed_at)
         async with self._write_lock:
             turns, total_seconds = self._complete_turn_and_save_session_sync(
                 state,
                 user_id,
                 max(0, duration_seconds),
+                timestamp,
                 next_revision,
             )
         state.members[user_id].turns = turns
@@ -317,35 +398,22 @@ class SQLiteRepository:
         state: SessionState,
         user_id: int,
         duration_seconds: int,
+        completed_at: int,
         next_revision: int,
     ) -> tuple[int, int]:
         connection = self._connect()
         try:
             connection.execute("BEGIN IMMEDIATE")
-            connection.execute(
-                """
-                INSERT INTO user_stats (guild_id, user_id, turns, total_seconds)
-                VALUES (?, ?, 1, ?)
-                ON CONFLICT(guild_id, user_id) DO UPDATE SET
-                    turns = turns + 1,
-                    total_seconds = total_seconds + excluded.total_seconds
-                """,
-                (state.guild_id, user_id, duration_seconds),
+            turns, total_seconds = self._upsert_completed_turn_sync(
+                connection,
+                guild_id=state.guild_id,
+                user_id=user_id,
+                duration_seconds=duration_seconds,
+                completed_at=completed_at,
             )
-            row = connection.execute(
-                """
-                SELECT turns, total_seconds FROM user_stats
-                WHERE guild_id = ? AND user_id = ?
-                """,
-                (state.guild_id, user_id),
-            ).fetchone()
-            if row is None:
-                raise RepositoryError("completed-turn statistics were not persisted")
-            turns = int(row["turns"])
-            total_seconds = int(row["total_seconds"])
 
-            # Render the atomic snapshot with the authoritative global stats,
-            # without mutating live state until the transaction commits.
+            # Render the atomic snapshot with the authoritative active-window
+            # stats, without mutating live state until the transaction commits.
             payload = state.to_dict()
             payload["revision"] = next_revision
             member_payload = payload["members"].get(str(user_id))
@@ -380,6 +448,59 @@ class SQLiteRepository:
             raise
         finally:
             connection.close()
+
+    @staticmethod
+    def _upsert_completed_turn_sync(
+        connection: sqlite3.Connection,
+        *,
+        guild_id: int,
+        user_id: int,
+        duration_seconds: int,
+        completed_at: int,
+    ) -> tuple[int, int]:
+        parameters = {
+            "guild_id": guild_id,
+            "user_id": user_id,
+            "duration_seconds": duration_seconds,
+            "completed_at": completed_at,
+            "inactivity_seconds": STATISTICS_INACTIVITY_SECONDS,
+        }
+        connection.execute(
+            """
+            INSERT INTO user_stats (
+                guild_id, user_id, turns, total_seconds, last_completed_at
+            ) VALUES (
+                :guild_id, :user_id, 1, :duration_seconds, :completed_at
+            )
+            ON CONFLICT(guild_id, user_id) DO UPDATE SET
+                turns = CASE
+                    WHEN user_stats.last_completed_at IS NULL
+                        OR user_stats.last_completed_at
+                            <= :completed_at - :inactivity_seconds
+                    THEN 1
+                    ELSE user_stats.turns + 1
+                END,
+                total_seconds = CASE
+                    WHEN user_stats.last_completed_at IS NULL
+                        OR user_stats.last_completed_at
+                            <= :completed_at - :inactivity_seconds
+                    THEN :duration_seconds
+                    ELSE user_stats.total_seconds + :duration_seconds
+                END,
+                last_completed_at = :completed_at
+            """,
+            parameters,
+        )
+        row = connection.execute(
+            """
+            SELECT turns, total_seconds FROM user_stats
+            WHERE guild_id = ? AND user_id = ?
+            """,
+            (guild_id, user_id),
+        ).fetchone()
+        if row is None:
+            raise RepositoryError("completed-turn statistics were not persisted")
+        return int(row["turns"]), int(row["total_seconds"])
 
     async def seed_texts(self, seed_path: Path) -> int:
         """Insert validated seed records idempotently and return the new count."""

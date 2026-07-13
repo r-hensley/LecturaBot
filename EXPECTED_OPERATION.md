@@ -145,7 +145,9 @@ Observed behavior includes:
   clone enhancement and was not present in the captured original-bot panel.
 - **Visible statistics:** Every numbered member row includes `turns` and
   `avg reading time`. A normal completed reading updates those values before
-  the next turn's fresh queue panel is published.
+  the next turn's fresh queue panel is published. Each participant has an
+  independent six-hour inactivity window for those statistics; it is separate
+  from the room-session lifetime described below.
 - **Room-session lifetime:** A room session remains active while at least one
   participant remains queued, including while it is paused below the
   two-participant minimum. Its state survives a bot restart. A temporary
@@ -387,19 +389,37 @@ original channel export.
 ### Clone requirements from live POC testing
 
 - Completed-turn totals and average reading time are always included on active
-  numbered queue rows, including `n/a` for users without a completed reading.
+  numbered queue rows, including `n/a` for users without an active completed
+  reading statistics window.
 - A normally completed reading is recorded before the next turn's fresh queue
   panel is rendered, so the just-finished reader's `turns` and
   `avg reading time` values are immediately visible there.
+- Statistics are keyed independently per server and user. A normal completion
+  starts or extends that user's window for 21,600 seconds from the completion.
+  The window remains active while less than six hours have elapsed since the
+  last normal completion; at exactly six hours it is expired.
+- Expiration resets both the completed-turn count and accumulated reading time,
+  so the next queue refresh renders both `turns` and `avg reading time` as
+  `n/a`. The user's next normal completion starts a fresh window at `turns: 1`,
+  with its duration as the new average.
 - AFK skips, voice/queue departures, and turns passed before a reading is
-  published do not count as completed readings.
+  published do not count as completed readings and do not extend the window.
+  Joining, starting a queue, and other participants' completions also do not
+  extend it. Different users therefore expire independently.
+- Statistics are reconciled when the queue is next accessed or refreshed. An
+  already-posted Discord panel does not edit itself at the exact expiry time.
+- Legacy lifetime totals without a trustworthy last-completion timestamp start
+  fresh when this behavior is deployed.
+- Reading time begins when the selected passage is published and ends when the
+  current reader normally passes the turn. Selection time, AFK skips,
+  departures, and unpublished turns do not contribute.
 
-### Timing behavior still to confirm
+### Original-bot timing behavior still to confirm
 
-- Whether `turns` and `avg reading time` are scoped to the current session, server, user lifetime, language, or some combination.
-- Whether timing runs from activation to **Pass Turn**, from text publication to **Pass Turn**, or only during the spoken reading.
-- Whether time spent selecting a text or reviewing corrections is included.
-- How skipped, abandoned, or disconnected turns affect statistics.
+- Follow-up feedback says the original bot's completed-turn count operated
+  "day by day," but its exact calendar boundary, timezone, and whether the
+  average reset with the count remain unknown. The clone uses the independent
+  six-hour inactivity windows specified above.
 - Rounding rules and behavior for readings longer than 59 minutes.
 - Whether the relative start time in the sample is intended behavior. It remained several hours old across multiple reader changes, despite being labeled as the current turn's start, so it may represent a session start or an existing bot defect.
 
@@ -471,8 +491,9 @@ This is a behavioral inventory, not a database-schema decision.
 - Queue position
 - Catalog text identities already used by this reader in the current room
   session
-- Completed-turn count
-- Accumulated or average turn time
+- Completed-turn count in the participant's independent six-hour statistics
+  window
+- Accumulated and average turn time in that same window
 - Possibly native and learning languages
 
 ### Reading text
@@ -533,8 +554,8 @@ The reimplementation is presently expected to need:
   animal emoji aliases.
 - Atomic correction validation, with an ephemeral modal error that lists every
   unmatched entry and no promise of ephemeral errors for direct replies.
-- Visible completed-turn and average-time tracking, updated before the next
-  turn panel is published.
+- Visible completed-turn and average-time tracking in independent per-user
+  six-hour inactivity windows, updated before the next turn panel is published.
 - An empty-queue state.
 - Configurable bot-bug and content-problem contacts.
 - Safe handling of Unicode names and bilingual text.
@@ -627,3 +648,14 @@ The most useful future examples would show:
 - Required per-reader catalog no-repeat history for one room session, persisted
   across restart and temporary leave/rejoin, reset on an empty queue, with no
   automatic recycling after a reader exhausts a language/level.
+
+### Batch 8: Statistics-window feedback
+
+- Reported that a new queue retained completed-turn totals from the previous
+  day; follow-up clarified that the concern was the statistics, not the
+  upcoming-turn position numbers.
+- Confirmed that the original bot presented turn totals "day by day."
+- Chose independent per-server/user statistics windows for the clone: a normal
+  completed reading starts or extends that user's window, and six hours without
+  another normal completion resets both the count and average. Queue activity,
+  AFK skips, and other users' turns do not extend it.

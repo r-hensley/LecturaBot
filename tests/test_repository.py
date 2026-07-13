@@ -8,7 +8,12 @@ import pytest
 
 from lecturabot.models import ChannelMode, MemberState, SessionState
 from lecturabot.models import Language, Level
-from lecturabot.repository import RepositoryError, SCHEMA_VERSION, SQLiteRepository
+from lecturabot.repository import (
+    RepositoryError,
+    SCHEMA_VERSION,
+    STATISTICS_INACTIVITY_SECONDS,
+    SQLiteRepository,
+)
 
 
 async def _repository(tmp_path: Path) -> SQLiteRepository:
@@ -61,6 +66,48 @@ async def test_initialize_rejects_database_from_newer_schema(
 
     with sqlite3.connect(database_path) as connection:
         assert connection.execute("PRAGMA user_version").fetchone()[0] == newer_version
+
+
+async def test_initialize_migrates_lifetime_stats_to_fresh_windows(
+    tmp_path: Path,
+) -> None:
+    database_path = tmp_path / "state" / "legacy.sqlite3"
+    database_path.parent.mkdir()
+    with sqlite3.connect(database_path) as connection:
+        connection.execute(
+            """
+            CREATE TABLE user_stats (
+                guild_id INTEGER NOT NULL,
+                user_id INTEGER NOT NULL,
+                turns INTEGER NOT NULL,
+                total_seconds INTEGER NOT NULL,
+                PRIMARY KEY (guild_id, user_id)
+            )
+            """
+        )
+        connection.execute(
+            "INSERT INTO user_stats VALUES (?, ?, ?, ?)",
+            (100, 41, 7, 420),
+        )
+        connection.execute("PRAGMA user_version = 1")
+
+    repository = SQLiteRepository(database_path)
+    await repository.initialize()
+
+    assert await repository.schema_version() == SCHEMA_VERSION
+    assert await repository.get_user_stats(100, 41, at_timestamp=10_000) == (0, 0)
+    with sqlite3.connect(database_path) as connection:
+        columns = {
+            str(row[1]) for row in connection.execute("PRAGMA table_info(user_stats)")
+        }
+        row = connection.execute(
+            """
+            SELECT turns, total_seconds, last_completed_at
+            FROM user_stats WHERE guild_id = 100 AND user_id = 41
+            """
+        ).fetchone()
+    assert "last_completed_at" in columns
+    assert row == (0, 0, None)
 
 
 async def test_seed_is_idempotent_and_catalog_filters_language_and_level(
@@ -133,21 +180,81 @@ async def test_user_stats_persist_across_repository_instances(
     tmp_path: Path,
 ) -> None:
     repository = await _repository(tmp_path)
+    first_completion = 10_000
 
-    assert await repository.get_user_stats(100, 41) == (0, 0)
+    assert await repository.get_user_stats(
+        100, 41, at_timestamp=first_completion
+    ) == (0, 0)
     assert await repository.record_completed_turn(
         guild_id=100,
         user_id=41,
         duration_seconds=30,
+        completed_at=first_completion,
     ) == (1, 30)
     assert await repository.record_completed_turn(
         guild_id=100,
         user_id=41,
         duration_seconds=-5,
+        completed_at=first_completion + 60,
     ) == (2, 30)
 
     reopened = SQLiteRepository(repository.database_path)
-    assert await reopened.get_user_stats(100, 41) == (2, 30)
+    await reopened.initialize()
+    assert await reopened.get_user_stats(
+        100,
+        41,
+        at_timestamp=first_completion + 60,
+    ) == (2, 30)
+
+
+async def test_user_stats_expire_independently_after_six_idle_hours(
+    tmp_path: Path,
+) -> None:
+    repository = await _repository(tmp_path)
+    first_completion = 50_000
+    just_before_expiry = first_completion + STATISTICS_INACTIVITY_SECONDS - 1
+
+    assert await repository.record_completed_turn(
+        guild_id=100,
+        user_id=41,
+        duration_seconds=30,
+        completed_at=first_completion,
+    ) == (1, 30)
+    assert await repository.get_user_stats(
+        100,
+        41,
+        at_timestamp=just_before_expiry,
+    ) == (1, 30)
+
+    # A completion one second before expiry extends this user's window from
+    # that new completion, rather than from the first turn in the window.
+    assert await repository.record_completed_turn(
+        guild_id=100,
+        user_id=41,
+        duration_seconds=45,
+        completed_at=just_before_expiry,
+    ) == (2, 75)
+    assert await repository.record_completed_turn(
+        guild_id=100,
+        user_id=42,
+        duration_seconds=20,
+        completed_at=just_before_expiry + 1,
+    ) == (1, 20)
+
+    second_expiry = just_before_expiry + STATISTICS_INACTIVITY_SECONDS
+    assert await repository.get_user_stats_for_users(
+        100,
+        [41, 42],
+        at_timestamp=second_expiry,
+    ) == {41: (0, 0), 42: (1, 20)}
+
+    # The first completion after expiry starts a fresh aggregate.
+    assert await repository.record_completed_turn(
+        guild_id=100,
+        user_id=41,
+        duration_seconds=25,
+        completed_at=second_expiry,
+    ) == (1, 25)
 
 
 async def test_complete_turn_updates_stats_and_session_atomically(
@@ -160,11 +267,53 @@ async def test_complete_turn_updates_stats_and_session_atomically(
         state=state,
         user_id=41,
         duration_seconds=25,
+        completed_at=10_000,
     )
 
     assert result == (1, 25)
-    assert await repository.get_user_stats(100, 41) == (1, 25)
+    assert await repository.get_user_stats(
+        100, 41, at_timestamp=10_000
+    ) == (1, 25)
     assert state.members[41].turns == 1
     assert state.members[41].total_seconds == 25
     assert state.revision == 1
     assert await repository.load_session(state.text_channel_id) == state
+
+
+async def test_atomic_completion_resets_expired_aggregate_and_snapshot(
+    tmp_path: Path,
+) -> None:
+    repository = await _repository(tmp_path)
+    state = _session()
+    previous_completion = 20_000
+    await repository.record_completed_turn(
+        guild_id=100,
+        user_id=41,
+        duration_seconds=30,
+        completed_at=previous_completion,
+    )
+    await repository.record_completed_turn(
+        guild_id=100,
+        user_id=41,
+        duration_seconds=40,
+        completed_at=previous_completion + 60,
+    )
+
+    completed_at = previous_completion + 60 + STATISTICS_INACTIVITY_SECONDS
+    result = await repository.complete_turn_and_save_session(
+        state=state,
+        user_id=41,
+        duration_seconds=25,
+        completed_at=completed_at,
+    )
+
+    assert result == (1, 25)
+    assert await repository.get_user_stats(
+        100, 41, at_timestamp=completed_at
+    ) == (1, 25)
+    assert state.members[41].turns == 1
+    assert state.members[41].total_seconds == 25
+    recovered = await repository.load_session(state.text_channel_id)
+    assert recovered is not None
+    assert recovered.members[41].turns == 1
+    assert recovered.members[41].total_seconds == 25

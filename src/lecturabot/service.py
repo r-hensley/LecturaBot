@@ -132,7 +132,7 @@ class SessionService:
     async def initialize(self) -> None:
         """Load snapshots and repair states interrupted before publication."""
         for state in await self.repository.load_all_sessions():
-            changed = False
+            changed = await self._refresh_member_statistics(state)
             if not state.queue and (
                 state.used_text_ids or state.seen_text_ids_by_user
             ):
@@ -161,14 +161,42 @@ class SessionService:
     def _lock_for(self, text_channel_id: int) -> asyncio.Lock:
         return self._locks.setdefault(text_channel_id, asyncio.Lock())
 
-    async def _load_locked(self, text_channel_id: int) -> SessionState | None:
+    async def _load_locked(
+        self,
+        text_channel_id: int,
+        *,
+        at_timestamp: int | None = None,
+    ) -> SessionState | None:
         state = self._states.get(text_channel_id)
+        if state is None:
+            state = await self.repository.load_session(text_channel_id)
         if state is not None:
-            return state
-        state = await self.repository.load_session(text_channel_id)
-        if state is not None:
+            await self._refresh_member_statistics(state, at_timestamp=at_timestamp)
             self._states[text_channel_id] = state
         return state
+
+    async def _refresh_member_statistics(
+        self,
+        state: SessionState,
+        *,
+        at_timestamp: int | None = None,
+    ) -> bool:
+        """Replace cached aggregates with each user's active six-hour window."""
+        if not state.members:
+            return False
+        statistics = await self.repository.get_user_stats_for_users(
+            state.guild_id,
+            set(state.members),
+            at_timestamp=self._clock() if at_timestamp is None else at_timestamp,
+        )
+        changed = False
+        for user_id, member in state.members.items():
+            turns, total_seconds = statistics[user_id]
+            if member.turns != turns or member.total_seconds != total_seconds:
+                member.turns = turns
+                member.total_seconds = total_seconds
+                changed = True
+        return changed
 
     @staticmethod
     def _snapshot(state: SessionState) -> SessionState:
@@ -288,7 +316,9 @@ class SessionService:
                     f"The queue supports up to {self.maximum_participants} people.",
                 )
             turns, total_seconds = await self.repository.get_user_stats(
-                state.guild_id, user_id
+                state.guild_id,
+                user_id,
+                at_timestamp=self._clock(),
             )
             state.queue.append(user_id)
             state.members[user_id] = MemberState(
@@ -659,8 +689,14 @@ class SessionService:
     ) -> Transition:
         """Complete the active turn; only the current reader may do this."""
         async with self._lock_for(text_channel_id):
+            completed_at = self._clock()
             state = self._snapshot(
-                self._require_state(await self._load_locked(text_channel_id))
+                self._require_state(
+                    await self._load_locked(
+                        text_channel_id,
+                        at_timestamp=completed_at,
+                    )
+                )
             )
             self._require_active_source(state, source_message_id)
             self._require_current_reader(state, actor_id)
@@ -669,11 +705,12 @@ class SessionService:
             completed_reading = state.active_reading
             self._advance(state)
             if completed_reading is not None:
-                duration = max(0, self._clock() - completed_reading.started_at)
+                duration = max(0, completed_at - completed_reading.started_at)
                 await self.repository.complete_turn_and_save_session(
                     state=state,
                     user_id=actor_id,
                     duration_seconds=duration,
+                    completed_at=completed_at,
                 )
                 self._states[state.text_channel_id] = state
             else:

@@ -26,7 +26,8 @@ The implementation follows the observed behavior in [EXPECTED_OPERATION.md](EXPE
   aliases
 - Grouped correction attribution, with later cross-corrector duplicates struck through
 - Current-reader-only pass and a separate, fixed three-vote AFK skip action
-- Guild/user completed-turn totals and average reading time
+- Per-guild/user completed-turn totals and average reading time, reset after six
+  hours without a normally completed reading
 - Numbered queue panels in upcoming-turn order, republished after departures and turn changes
 - SQLite-backed catalog, statistics, and versioned active-session snapshots
 - Startup reconciliation of voice membership and persisted Discord controls
@@ -39,7 +40,12 @@ The implementation follows the observed behavior in [EXPECTED_OPERATION.md](EXPE
 - The server guide confirms a **Start Reading** action, but it was absent from the captured queue component dump. This POC appends a provisional `Comenzar Lectura / Start Reading` button with `custom_id="start_reading"` while leaving all observed controls unchanged.
 - `/lecturatest` publishes a fresh public queue panel in the channel and maintains one active queue panel per channel pair. Queue departures and turn changes publish a fresh numbered panel so the current order and updated statistics remain visible; superseded panels are retired. The planned final command names remain `/queue` and `/cola` after the original bot is retired.
 - A session pauses when fewer than two queued voice participants remain. It must be started again after the second participant returns.
-- Reading time runs from publication of the reading text until a normal current-reader pass. Selection time, skipped turns, and disconnected turns do not affect statistics.
+- Reading time runs from publication of the reading text until a normal
+  current-reader pass. That completion starts or extends only that user's
+  six-hour statistics window. After six hours without another normal
+  completion, both `turns` and average return to `n/a` on the next queue
+  refresh. Joining, leaving, selection-only passes, AFK skips, and other users'
+  turns do not extend the window.
 - **Pasar turno / Pass Turn** is available only to the current reader. A separate **Saltar turno ausente / Skip AFK Turn** action requires three unique votes from queued, non-current readers; the threshold is never reduced when fewer voters are available.
 - Correction counts de-duplicate the normalized matched target. Attribution groups retain each corrector's submitted entry, but a later duplicate from another corrector is rendered as `~~struck through~~` to show that it was discarded.
 - Correction batches split at newlines and commas outside parentheses. A

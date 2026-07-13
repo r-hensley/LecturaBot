@@ -165,13 +165,24 @@ The queue panel shows:
 
 - numbered upcoming-turn positions: `1` is the current reader, `2` is next,
   and the remaining numbers follow the reading rotation
-- `turns`: the number of readings you completed normally
-- `avg reading time`: your average completed reading time in `MM:SS`
-- `n/a`: no completed reading is available yet
+- `turns`: the number of readings you completed normally during your current
+  statistics window
+- `avg reading time`: your average completed reading time in that same window,
+  formatted as `MM:SS`
+- `n/a`: you do not currently have a completed reading in an active statistics
+  window
 
 Reading time begins when the bot publishes the selected passage and ends when
 the current reader presses **Pass Turn**. The newly completed reading and its
 updated statistics appear in the fresh queue panel for the next turn.
+
+Each person has an independent statistics window. A normal completed reading
+starts or extends it for six hours from that completion. After exactly six
+hours without another normal completion, both values reset to `n/a` on the next
+queue refresh; the next completed reading starts again at `turns: 1`. Joining,
+leaving, starting a queue, selection-only passes, AFK skips, and other users'
+turns do not extend your window. An already-posted Discord panel updates when
+the queue is next refreshed rather than changing by itself at the expiry time.
 
 ### Common problems
 
@@ -351,14 +362,26 @@ El panel de la cola muestra:
 
 - puestos numerados según los próximos turnos: `1` es el lector actual, `2` es
   el siguiente y los demás números siguen el orden de rotación
-- `turns`: la cantidad de lecturas que completaste normalmente
-- `avg reading time`: el promedio de tus lecturas completadas en formato
-  `MM:SS`
-- `n/a`: todavía no hay ninguna lectura completada
+- `turns`: la cantidad de lecturas que completaste normalmente durante tu
+  ventana actual de estadísticas
+- `avg reading time`: el promedio de las lecturas completadas en esa misma
+  ventana, en formato `MM:SS`
+- `n/a`: actualmente no tienes una lectura completada dentro de una ventana
+  activa de estadísticas
 
 El tiempo comienza cuando el bot publica el texto elegido y termina cuando el
 lector actual pulsa **Pass Turn**. La lectura recién completada y las
 estadísticas actualizadas aparecerán en el panel nuevo del siguiente turno.
+
+Cada persona tiene una ventana de estadísticas independiente. Una lectura
+completada normalmente la inicia o la prolonga durante seis horas desde esa
+lectura. Después de exactamente seis horas sin otra lectura completada, ambos
+valores vuelven a `n/a` en la siguiente actualización de la cola; la próxima
+lectura completada comienza otra vez en `turns: 1`. Unirse, salir, iniciar una
+cola, pasar antes de publicar un texto, saltar un turno AFK y los turnos de
+otras personas no prolongan tu ventana. Un panel de Discord ya publicado se
+actualiza la próxima vez que se actualice la cola, no automáticamente al vencer
+la ventana.
 
 ### Problemas frecuentes
 

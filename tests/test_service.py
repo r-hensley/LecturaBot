@@ -15,7 +15,7 @@ from lecturabot.models import (
     ReadingText,
     SessionPhase,
 )
-from lecturabot.repository import SQLiteRepository
+from lecturabot.repository import STATISTICS_INACTIVITY_SECONDS, SQLiteRepository
 from lecturabot.service import (
     SessionError,
     SessionService,
@@ -201,7 +201,9 @@ async def test_start_gate_rotation_stats_and_restart_round_trip(
     assert passed.state.members[10].turns == 1
     assert passed.state.members[10].total_seconds == 125
     assert passed.state.members[10].average_seconds == 125
-    assert await repository.get_user_stats(1, 10) == (1, 125)
+    assert await repository.get_user_stats(
+        1, 10, at_timestamp=clock.value
+    ) == (1, 125)
 
     restarted = SessionService(repository, clock=clock)
     await restarted.initialize()
@@ -210,6 +212,138 @@ async def test_start_gate_rotation_stats_and_restart_round_trip(
     assert recovered.current_user_id == 20
     assert recovered.members[10].turns == 1
     assert recovered.members[10].total_seconds == 125
+
+    clock.value = 1_135 + STATISTICS_INACTIVITY_SECONDS
+    expired_service = SessionService(repository, clock=clock)
+    await expired_service.initialize()
+    expired = await expired_service.get_session(101)
+    assert expired is not None
+    assert expired.members[10].turns == 0
+    assert expired.members[10].total_seconds == 0
+    assert expired.members[10].average_seconds is None
+
+
+@pytest.mark.asyncio
+async def test_queued_users_expire_independently_when_another_reader_finishes(
+    tmp_path: Path,
+) -> None:
+    service, repository, clock = await _make_service(tmp_path)
+    first_completion = clock.value
+    await repository.record_completed_turn(
+        guild_id=1,
+        user_id=10,
+        duration_seconds=60,
+        completed_at=first_completion,
+    )
+    await _join(service, 10, 20)
+    await service.start(text_channel_id=101, actor_id=10)
+    await service.set_picker_message(
+        text_channel_id=101,
+        reader_id=10,
+        message_id=500,
+    )
+
+    # Passing before a reading is published advances the queue without
+    # extending the current reader's statistics window.
+    clock.value = first_completion + STATISTICS_INACTIVITY_SECONDS - 20
+    selection_pass = await service.pass_turn(
+        text_channel_id=101,
+        actor_id=10,
+        source_message_id=500,
+    )
+    assert selection_pass.state.current_user_id == 20
+    assert selection_pass.state.members[10].turns == 1
+
+    clock.value = first_completion + STATISTICS_INACTIVITY_SECONDS - 10
+    await service.set_picker_message(
+        text_channel_id=101,
+        reader_id=20,
+        message_id=600,
+    )
+    await service.begin_custom_reading(
+        text_channel_id=101,
+        reader_id=20,
+        picker_message_id=600,
+        language=Language.ENGLISH,
+        body="A short reading near the statistics boundary.",
+    )
+    await service.set_reading_message(
+        text_channel_id=101,
+        reader_id=20,
+        message_id=700,
+    )
+
+    clock.value = first_completion + STATISTICS_INACTIVITY_SECONDS
+    passed = await service.pass_turn(
+        text_channel_id=101,
+        actor_id=20,
+        source_message_id=700,
+    )
+
+    assert passed.state.members[10].turns == 0
+    assert passed.state.members[10].total_seconds == 0
+    assert passed.state.members[10].average_seconds is None
+    assert passed.state.members[20].turns == 1
+    assert passed.state.members[20].total_seconds == 10
+    assert await repository.get_user_stats(
+        1, 10, at_timestamp=clock.value
+    ) == (0, 0)
+    assert await repository.get_user_stats(
+        1, 20, at_timestamp=clock.value
+    ) == (1, 10)
+
+
+@pytest.mark.asyncio
+async def test_queue_activity_and_afk_skip_do_not_extend_statistics(
+    tmp_path: Path,
+) -> None:
+    service, repository, clock = await _make_service(tmp_path)
+    first_completion = clock.value
+    await repository.record_completed_turn(
+        guild_id=1,
+        user_id=10,
+        duration_seconds=60,
+        completed_at=first_completion,
+    )
+    await _join(service, 10, 20, 30, 40)
+    await service.start(text_channel_id=101, actor_id=10)
+    await service.set_picker_message(
+        text_channel_id=101,
+        reader_id=10,
+        message_id=500,
+    )
+
+    clock.value = first_completion + STATISTICS_INACTIVITY_SECONDS - 1
+    await service.vote_to_skip(
+        text_channel_id=101,
+        voter_id=20,
+        source_message_id=500,
+    )
+    await service.vote_to_skip(
+        text_channel_id=101,
+        voter_id=30,
+        source_message_id=500,
+    )
+    skipped = await service.vote_to_skip(
+        text_channel_id=101,
+        voter_id=40,
+        source_message_id=500,
+    )
+    assert skipped.state.members[10].turns == 1
+
+    await service.leave(text_channel_id=101, user_id=10)
+    rejoined = await service.join(
+        text_channel_id=101,
+        user_id=10,
+        display_name="Reader 10",
+    )
+    assert rejoined.state.members[10].turns == 1
+
+    clock.value = first_completion + STATISTICS_INACTIVITY_SECONDS
+    expired = await service.get_session(101)
+    assert expired is not None
+    assert expired.members[10].turns == 0
+    assert expired.members[10].total_seconds == 0
 
 
 @pytest.mark.asyncio
