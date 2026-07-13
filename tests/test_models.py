@@ -53,7 +53,7 @@ def test_session_snapshot_round_trip_preserves_complete_state() -> None:
         turn_started_at=1_700_000_000,
         active_reading=reading,
         skip_votes={20},
-        used_text_ids={4, 7},
+        seen_text_ids_by_user={10: {4, 7}, 20: {4}},
         queue_message_id=500,
         revision=3,
     )
@@ -65,13 +65,34 @@ def test_session_snapshot_round_trip_preserves_complete_state() -> None:
     assert payload["snapshot_version"] == 1
     assert payload["members"].keys() == {"10", "20"}
     assert payload["skip_votes"] == [20]
-    assert payload["used_text_ids"] == [4, 7]
+    assert payload["seen_text_ids_by_user"] == {
+        "10": [4, 7],
+        "20": [4],
+    }
     assert restored.members[10].average_seconds == 124
     assert restored.active_reading is not None
     assert restored.active_reading.correction_count == 2
     assert restored.active_reading.correction_groups[0].entries[0].source is (
         CorrectionSource.REPLY
     )
+
+
+def test_legacy_room_wide_text_history_migrates_to_queued_readers() -> None:
+    state = SessionState(
+        session_id=12,
+        guild_id=1,
+        text_channel_id=101,
+        voice_channel_id=201,
+        queue=[10, 20],
+        members={10: _member(10, "A"), 20: _member(20, "B")},
+        used_text_ids={4, 7},
+    )
+    payload = state.to_dict()
+    payload.pop("seen_text_ids_by_user")
+
+    restored = SessionState.from_dict(payload)
+
+    assert restored.seen_text_ids_by_user == {10: {4, 7}, 20: {4, 7}}
 
 
 def test_snapshot_rejects_unsupported_version() -> None:
@@ -294,4 +315,3 @@ def test_session_state_rejects_invalid_invariants(
 ) -> None:
     with pytest.raises(ValueError, match=message):
         state.validate()
-

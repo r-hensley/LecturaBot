@@ -12,6 +12,7 @@ from lecturabot.models import (
     CorrectionSource,
     Language,
     Level,
+    ReadingText,
     SessionPhase,
 )
 from lecturabot.repository import SQLiteRepository
@@ -584,6 +585,178 @@ async def test_catalog_and_custom_only_selection_enforce_picker_and_mode(
     assert own_text.state.active_reading.body == "こんにちは。"
     assert own_text.state.active_reading.level is None
     assert own_text.state.active_reading.custom_language_label == "日本語"
+
+
+@pytest.mark.asyncio
+async def test_catalog_history_is_per_reader_strict_and_resets_when_queue_empties(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service, repository, _ = await _make_service(tmp_path)
+    catalog = [
+        ReadingText(
+            id=9_001,
+            language=Language.ENGLISH,
+            level=Level.BEGINNER,
+            body="First catalog text.",
+        ),
+        ReadingText(
+            id=9_002,
+            language=Language.ENGLISH,
+            level=Level.BEGINNER,
+            body="Second catalog text.",
+        ),
+    ]
+    monkeypatch.setattr(
+        repository,
+        "list_texts",
+        AsyncMock(return_value=catalog),
+    )
+    await _join(service, 10, 20)
+    initial = await service.get_session(101)
+    assert initial is not None
+    initial_session_id = initial.session_id
+    await service.start(text_channel_id=101, actor_id=10)
+
+    await service.set_picker_message(
+        text_channel_id=101,
+        reader_id=10,
+        message_id=500,
+    )
+    first_for_10 = await service.begin_catalog_reading(
+        text_channel_id=101,
+        reader_id=10,
+        picker_message_id=500,
+        language=Language.ENGLISH,
+        level=Level.BEGINNER,
+    )
+    assert first_for_10.state.active_reading is not None
+    assert first_for_10.state.active_reading.source_text_id == 9_001
+    await service.set_reading_message(
+        text_channel_id=101,
+        reader_id=10,
+        message_id=700,
+    )
+    await service.pass_turn(
+        text_channel_id=101,
+        actor_id=10,
+        source_message_id=700,
+    )
+
+    # Histories are reader-specific: reader 20 may receive the same first text.
+    await service.set_picker_message(
+        text_channel_id=101,
+        reader_id=20,
+        message_id=501,
+    )
+    first_for_20 = await service.begin_catalog_reading(
+        text_channel_id=101,
+        reader_id=20,
+        picker_message_id=501,
+        language=Language.ENGLISH,
+        level=Level.BEGINNER,
+    )
+    assert first_for_20.state.active_reading is not None
+    assert first_for_20.state.active_reading.source_text_id == 9_001
+    await service.set_reading_message(
+        text_channel_id=101,
+        reader_id=20,
+        message_id=701,
+    )
+    await service.pass_turn(
+        text_channel_id=101,
+        actor_id=20,
+        source_message_id=701,
+    )
+
+    await service.set_picker_message(
+        text_channel_id=101,
+        reader_id=10,
+        message_id=502,
+    )
+    second_for_10 = await service.begin_catalog_reading(
+        text_channel_id=101,
+        reader_id=10,
+        picker_message_id=502,
+        language=Language.ENGLISH,
+        level=Level.BEGINNER,
+    )
+    assert second_for_10.state.active_reading is not None
+    assert second_for_10.state.active_reading.source_text_id == 9_002
+    assert second_for_10.state.seen_text_ids_by_user == {
+        10: {9_001, 9_002},
+        20: {9_001},
+    }
+    await service.set_reading_message(
+        text_channel_id=101,
+        reader_id=10,
+        message_id=702,
+    )
+    await service.pass_turn(
+        text_channel_id=101,
+        actor_id=10,
+        source_message_id=702,
+    )
+
+    # Reader 20 passes without choosing, returning the turn to exhausted reader 10.
+    await service.set_picker_message(
+        text_channel_id=101,
+        reader_id=20,
+        message_id=503,
+    )
+    await service.pass_turn(
+        text_channel_id=101,
+        actor_id=20,
+        source_message_id=503,
+    )
+    await service.set_picker_message(
+        text_channel_id=101,
+        reader_id=10,
+        message_id=504,
+    )
+    before_exhaustion = await service.get_session(101)
+    with pytest.raises(SessionError) as exhausted:
+        await service.begin_catalog_reading(
+            text_channel_id=101,
+            reader_id=10,
+            picker_message_id=504,
+            language=Language.ENGLISH,
+            level=Level.BEGINNER,
+        )
+    _assert_error(exhausted, "no_unseen_texts")
+    after_exhaustion = await service.get_session(101)
+    assert before_exhaustion is not None
+    assert after_exhaustion is not None
+    assert after_exhaustion.to_dict() == before_exhaustion.to_dict()
+
+    one_left = await service.leave(text_channel_id=101, user_id=10)
+    assert one_left.state.session_id == initial_session_id
+    assert one_left.state.seen_text_ids_by_user == {
+        10: {9_001, 9_002},
+        20: {9_001},
+    }
+    emptied = await service.leave(text_channel_id=101, user_id=20)
+    assert emptied.state.queue == []
+    assert emptied.state.session_id != initial_session_id
+    assert emptied.state.seen_text_ids_by_user == {}
+
+    # The empty queue starts a fresh session, so its first text is eligible again.
+    await _join(service, 10, 20)
+    await service.start(text_channel_id=101, actor_id=10)
+    await service.set_picker_message(
+        text_channel_id=101,
+        reader_id=10,
+        message_id=600,
+    )
+    fresh_selection = await service.begin_catalog_reading(
+        text_channel_id=101,
+        reader_id=10,
+        picker_message_id=600,
+        language=Language.ENGLISH,
+        level=Level.BEGINNER,
+    )
+    assert fresh_selection.state.active_reading is not None
+    assert fresh_selection.state.active_reading.source_text_id == 9_001
 
 
 @pytest.mark.asyncio

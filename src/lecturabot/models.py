@@ -295,6 +295,7 @@ class SessionState:
     active_reading: ActiveReading | None = None
     skip_votes: set[int] = field(default_factory=set)
     used_text_ids: set[int] = field(default_factory=set)
+    seen_text_ids_by_user: dict[int, set[int]] = field(default_factory=dict)
     queue_message_id: int | None = None
     picker_message_id: int | None = None
     revision: int = 0
@@ -357,6 +358,10 @@ class SessionState:
             ),
             "skip_votes": sorted(self.skip_votes),
             "used_text_ids": sorted(self.used_text_ids),
+            "seen_text_ids_by_user": {
+                str(user_id): sorted(text_ids)
+                for user_id, text_ids in self.seen_text_ids_by_user.items()
+            },
             "queue_message_id": self.queue_message_id,
             "picker_message_id": self.picker_message_id,
             "revision": self.revision,
@@ -367,6 +372,21 @@ class SessionState:
         version = int(data.get("snapshot_version", 0))
         if version != SESSION_SNAPSHOT_VERSION:
             raise ValueError(f"unsupported session snapshot version: {version}")
+        used_text_ids = {
+            int(text_id) for text_id in data.get("used_text_ids", [])
+        }
+        if "seen_text_ids_by_user" in data:
+            seen_text_ids_by_user = {
+                int(user_id): {int(text_id) for text_id in text_ids}
+                for user_id, text_ids in data["seen_text_ids_by_user"].items()
+            }
+        else:
+            # Conservatively migrate the old room-wide history to every
+            # currently queued reader; an empty queue is reset by the service.
+            seen_text_ids_by_user = {
+                int(user_id): set(used_text_ids)
+                for user_id in data.get("members", {})
+            }
         state = cls(
             session_id=int(data["session_id"]),
             guild_id=int(data["guild_id"]),
@@ -387,9 +407,8 @@ class SessionState:
                 else ActiveReading.from_dict(data["active_reading"])
             ),
             skip_votes={int(user_id) for user_id in data.get("skip_votes", [])},
-            used_text_ids={
-                int(text_id) for text_id in data.get("used_text_ids", [])
-            },
+            used_text_ids=used_text_ids,
+            seen_text_ids_by_user=seen_text_ids_by_user,
             queue_message_id=data.get("queue_message_id"),
             picker_message_id=data.get("picker_message_id"),
             revision=int(data.get("revision", 0)),

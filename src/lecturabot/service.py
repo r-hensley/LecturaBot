@@ -133,6 +133,15 @@ class SessionService:
         """Load snapshots and repair states interrupted before publication."""
         for state in await self.repository.load_all_sessions():
             changed = False
+            if not state.queue and (
+                state.used_text_ids or state.seen_text_ids_by_user
+            ):
+                # Upgrade an already-empty persisted room to the explicit
+                # session boundary introduced with per-reader history.
+                state.session_id = await self.repository.allocate_session_id()
+                state.used_text_ids.clear()
+                state.seen_text_ids_by_user.clear()
+                changed = True
             if (
                 state.phase is SessionPhase.READING
                 and state.active_reading is not None
@@ -141,6 +150,7 @@ class SessionService:
                 # The process stopped after choosing a text but before its
                 # Discord message ID was committed. Keep the original picker
                 # usable when possible instead of leaving a phantom reading.
+                self._release_unpublished_catalog_text(state)
                 state.phase = SessionPhase.SELECTING
                 state.active_reading = None
                 changed = True
@@ -319,6 +329,13 @@ class SessionService:
             fell_below_minimum = len(state.queue) < self.minimum_participants
             if fell_below_minimum:
                 self._set_waiting(state)
+                if not state.queue:
+                    # An empty room is the explicit boundary between reading
+                    # sessions. Per-reader catalog history survives temporary
+                    # departures, but not the end of the room session.
+                    state.session_id = await self.repository.allocate_session_id()
+                    state.used_text_ids.clear()
+                    state.seen_text_ids_by_user.clear()
             elif was_current:
                 # Removing the last visible row wraps the turn to the first
                 # remaining participant; otherwise the same index is next.
@@ -413,16 +430,21 @@ class SessionService:
                     "No hay textos disponibles para esa opción. / "
                     "No texts are available for that option.",
                 )
-            unused = [text for text in candidates if text.id not in state.used_text_ids]
+            seen_by_reader = state.seen_text_ids_by_user.get(reader_id, set())
+            unused = [text for text in candidates if text.id not in seen_by_reader]
             if not unused:
-                # Reset only this language/level pool; selections in other
-                # pools should still retain their no-repeat history.
-                state.used_text_ids.difference_update(
-                    text.id for text in candidates
+                raise SessionError(
+                    "no_unseen_texts",
+                    "Ya leíste todos los textos de esta opción en esta sesión; "
+                    "elige otro nivel o usa tu propio texto. / You have read "
+                    "every text in this option during this session; choose "
+                    "another level or use your own text.",
                 )
-                unused = candidates
             selected = self._chooser(unused)
             state.used_text_ids.add(selected.id)
+            state.seen_text_ids_by_user.setdefault(reader_id, set()).add(
+                selected.id
+            )
             self._begin_reading(
                 state,
                 language=selected.language,
@@ -497,6 +519,7 @@ class SessionService:
             )
             self._require_current_reader(state, reader_id)
             if state.phase is SessionPhase.READING:
+                self._release_unpublished_catalog_text(state)
                 state.phase = SessionPhase.SELECTING
                 state.active_reading = None
                 if picker_message_id is not None:
@@ -849,6 +872,26 @@ class SessionService:
         state.skip_votes.clear()
         # Keep the selector ID until the reading message ID is committed. This
         # gives failure and restart recovery a valid control to return to.
+
+    @staticmethod
+    def _release_unpublished_catalog_text(state: SessionState) -> None:
+        reading = state.active_reading
+        if (
+            reading is None
+            or reading.message_id is not None
+            or reading.source_text_id is None
+        ):
+            return
+        seen = state.seen_text_ids_by_user.get(reading.reader_id)
+        if seen is not None:
+            seen.discard(reading.source_text_id)
+            if not seen:
+                state.seen_text_ids_by_user.pop(reading.reader_id, None)
+        if not any(
+            reading.source_text_id in text_ids
+            for text_ids in state.seen_text_ids_by_user.values()
+        ):
+            state.used_text_ids.discard(reading.source_text_id)
 
     def _advance(self, state: SessionState) -> None:
         # Keep durable join order stable and move only the current marker.
