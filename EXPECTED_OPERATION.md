@@ -2,7 +2,6 @@
 
 **Status:** Discovery draft 0.6
 **Last updated:** 2026-07-13
-**Project basis:** Authorized behavioral reimplementation of a closed-source bot, with the original bot owner's permission.
 
 This is a living specification assembled from user explanations, copied channel output, screenshots, and later clarifications. It describes expected behavior, not a chosen technical design. When the evidence is incomplete, the uncertainty is recorded rather than silently converted into a requirement.
 
