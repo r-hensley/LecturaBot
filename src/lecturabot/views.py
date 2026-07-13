@@ -344,7 +344,7 @@ class CustomTextModal(discord.ui.Modal):
 
 
 class CorrectionModal(discord.ui.Modal):
-    """Collect newline-delimited pronunciation corrections."""
+    """Collect comma- or newline-delimited pronunciation corrections."""
 
     def __init__(
         self,
@@ -370,7 +370,7 @@ class CorrectionModal(discord.ui.Modal):
             style=discord.TextStyle.paragraph,
             custom_id="correction_lines",
             placeholder=(
-                "Una palabra o frase por línea. / One word or phrase per line."
+                "Separa con comas o líneas. / Separate with commas or lines."
             ),
             min_length=1,
             max_length=1_000,

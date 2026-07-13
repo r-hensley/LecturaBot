@@ -5,6 +5,7 @@ import pytest
 from lecturabot.models import (
     ActiveReading,
     ChannelMode,
+    CorrectionEntry,
     CorrectionSource,
     Language,
     Level,
@@ -157,6 +158,62 @@ def test_duplicate_normalization_and_legacy_snapshot_loading() -> None:
         for entry in group.entries
     )
     assert restored.correction_count == 1
+
+
+def test_correction_match_text_round_trip_and_legacy_fallback() -> None:
+    annotated = CorrectionEntry(
+        text="produce (noun)",
+        source=CorrectionSource.BUTTON,
+        match_text="produce",
+    )
+
+    payload = annotated.to_dict()
+    restored = CorrectionEntry.from_dict(payload)
+    legacy = CorrectionEntry.from_dict(
+        {
+            "text": "apple",
+            "source": CorrectionSource.REPLY.value,
+            "discarded": False,
+        }
+    )
+
+    assert payload["match_text"] == "produce"
+    assert restored == annotated
+    assert restored.target_text == "produce"
+    assert legacy.match_text is None
+    assert legacy.target_text == "apple"
+
+
+def test_duplicate_corrections_compare_targets_while_preserving_display_text() -> None:
+    reading = ActiveReading(
+        reader_id=10,
+        reader_display_name="Reader",
+        language=Language.ENGLISH,
+        level=Level.BEGINNER,
+        body="An apple fell.",
+        started_at=100,
+    )
+    reading.add_corrections(
+        corrector_id=20,
+        corrector_display_name="Emoji user",
+        items=["🍎"],
+        match_texts=["apple"],
+        source=CorrectionSource.BUTTON,
+    )
+    reading.add_corrections(
+        corrector_id=30,
+        corrector_display_name="Word user",
+        items=["apple"],
+        source=CorrectionSource.REPLY,
+    )
+
+    emoji_entry = reading.correction_groups[0].entries[0]
+    duplicate_entry = reading.correction_groups[1].entries[0]
+    assert emoji_entry.text == "🍎"
+    assert emoji_entry.target_text == "apple"
+    assert duplicate_entry.discarded is True
+    assert reading.correction_count == 1
+    assert reading.correction_texts == ["apple", "apple"]
 
 
 @pytest.mark.parametrize(

@@ -199,6 +199,37 @@ def test_duplicate_correction_uses_strikethrough_without_bold() -> None:
     assert "**~~new york~~**" not in embed.description
 
 
+def test_alias_display_is_preserved_while_target_word_is_highlighted() -> None:
+    reading = ActiveReading(
+        reader_id=10,
+        reader_display_name="Reader",
+        language=Language.ENGLISH,
+        level=Level.BEGINNER,
+        body="We produce an apple.",
+        started_at=100,
+    )
+    reading.add_corrections(
+        corrector_id=20,
+        corrector_display_name="Listener",
+        items=["produce (noun)", "🍎"],
+        match_texts=["produce", "apple"],
+        source=CorrectionSource.BUTTON,
+    )
+
+    assert build_reading_content(reading) == (
+        "## Reader - Reading - English - Level Beginner\n"
+        "We __**produce**__ an __**apple**__.\n"
+        "** **"
+    )
+    embed = build_corrections_embed(reading)
+    assert embed.title == "Correcciones / Corrections : 2"
+    assert embed.description == (
+        "<@20> suggests:\n"
+        "**produce (noun)**\n"
+        "**🍎**"
+    )
+
+
 def _button_contract(view: discord.ui.View) -> list[tuple[str, str, int, int]]:
     return [
         (str(item.label), str(item.custom_id), int(item.style), int(item.row or 0))

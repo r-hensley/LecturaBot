@@ -6,6 +6,7 @@ import re
 
 import discord
 
+from .corrections import correction_pattern
 from .models import ActiveReading, Language, Level, SessionState
 
 
@@ -110,15 +111,6 @@ def _escape_user_text(value: str) -> str:
     return discord.utils.escape_mentions(discord.utils.escape_markdown(value))
 
 
-def _correction_pattern(correction: str) -> str:
-    pattern = re.escape(correction)
-    if correction[0].isalnum():
-        pattern = rf"(?<!\w){pattern}"
-    if correction[-1].isalnum():
-        pattern = rf"{pattern}(?!\w)"
-    return pattern
-
-
 def highlight_body(body: str, corrections: list[str]) -> str:
     """Highlight literal corrections longest-first without nesting markup.
 
@@ -134,7 +126,7 @@ def highlight_body(body: str, corrections: list[str]) -> str:
         return _escape_user_text(body)
 
     ordered = sorted(unique.values(), key=len, reverse=True)
-    combined = "|".join(f"(?:{_correction_pattern(item)})" for item in ordered)
+    combined = "|".join(f"(?:{correction_pattern(item)})" for item in ordered)
     matcher = re.compile(combined, flags=re.IGNORECASE)
 
     rendered: list[str] = []

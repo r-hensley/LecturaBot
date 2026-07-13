@@ -82,12 +82,19 @@ class CorrectionEntry:
     text: str
     source: CorrectionSource
     discarded: bool = False
+    match_text: str | None = None
+
+    @property
+    def target_text(self) -> str:
+        """Text in the reading represented by the displayed suggestion."""
+        return self.match_text or self.text
 
     def to_dict(self) -> dict[str, str | bool]:
         return {
             "text": self.text,
             "source": self.source.value,
             "discarded": self.discarded,
+            "match_text": self.target_text,
         }
 
     @classmethod
@@ -99,6 +106,12 @@ class CorrectionEntry:
             # field. Treat their entries as accepted rather than rejecting an
             # otherwise valid active session during startup recovery.
             discarded=bool(data.get("discarded", False)),
+            # Older snapshots used the displayed correction for matching.
+            match_text=(
+                None
+                if "match_text" not in data
+                else str(data["match_text"])
+            ),
         )
 
 
@@ -143,20 +156,20 @@ class ActiveReading:
 
     @property
     def correction_count(self) -> int:
-        """Count normalized suggestions once across all correctors."""
+        """Count normalized source-text targets once across all correctors."""
         return len(
             {
-                self._normalize_correction(entry.text)
+                self._normalize_correction(entry.target_text)
                 for group in self.correction_groups
                 for entry in group.entries
-                if self._normalize_correction(entry.text)
+                if self._normalize_correction(entry.target_text)
             }
         )
 
     @property
     def correction_texts(self) -> list[str]:
         return [
-            entry.text
+            entry.target_text
             for group in self.correction_groups
             for entry in group.entries
         ]
@@ -168,7 +181,12 @@ class ActiveReading:
         corrector_display_name: str,
         items: list[str],
         source: CorrectionSource,
+        match_texts: list[str] | None = None,
     ) -> None:
+        if match_texts is None:
+            match_texts = items
+        if len(match_texts) != len(items):
+            raise ValueError("match_texts must align with correction items")
         group = next(
             (
                 existing
@@ -188,17 +206,24 @@ class ActiveReading:
         owners_by_suggestion: dict[str, set[int]] = {}
         for existing_group in self.correction_groups:
             for entry in existing_group.entries:
-                normalized = self._normalize_correction(entry.text)
+                normalized = self._normalize_correction(entry.target_text)
                 if normalized:
                     owners_by_suggestion.setdefault(normalized, set()).add(
                         existing_group.user_id
                     )
 
-        for item in items:
-            normalized = self._normalize_correction(item)
+        for item, match_text in zip(items, match_texts, strict=True):
+            normalized = self._normalize_correction(match_text)
             prior_owners = owners_by_suggestion.get(normalized, set())
             discarded = bool(prior_owners - {corrector_id})
-            group.entries.append(CorrectionEntry(item, source, discarded))
+            group.entries.append(
+                CorrectionEntry(
+                    item,
+                    source,
+                    discarded=discarded,
+                    match_text=match_text,
+                )
+            )
             if normalized:
                 owners_by_suggestion.setdefault(normalized, set()).add(
                     corrector_id

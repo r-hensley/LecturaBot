@@ -6,10 +6,10 @@ import asyncio
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 import random
-import re
 import time
 
 from .config import ChannelPairConfig
+from .corrections import find_correction_target, split_correction_items
 from .models import (
     ActiveReading,
     ChannelMode,
@@ -54,8 +54,7 @@ def parse_correction_lines(
     max_items: int = 20,
     max_item_length: int = 100,
 ) -> list[str]:
-    items = [" ".join(line.split()) for line in raw_value.splitlines()]
-    items = [item for item in items if item]
+    items = split_correction_items(raw_value)
     if not items:
         raise SessionError(
             "empty_corrections",
@@ -76,17 +75,15 @@ def parse_correction_lines(
     return items
 
 
-def _correction_pattern(correction: str) -> str:
-    pattern = r"\s+".join(re.escape(part) for part in correction.split())
-    if correction[0].isalnum():
-        pattern = rf"(?<!\w){pattern}"
-    if correction[-1].isalnum():
-        pattern = rf"{pattern}(?!\w)"
-    return pattern
-
-
-def _contains_correction(body: str, correction: str) -> bool:
-    return re.search(_correction_pattern(correction), body, re.IGNORECASE) is not None
+def _missing_corrections_message(items: list[str]) -> str:
+    listed = ", ".join(
+        f"“{item if len(item) <= 60 else item[:59] + '…'}”" for item in items
+    )
+    return (
+        "No se guardó ninguna corrección / No corrections were saved. "
+        "No se encontró en el texto / Not found in the reading: "
+        f"{listed}"
+    )
 
 
 class SessionService:
@@ -557,15 +554,33 @@ class SessionService:
                     "El lector no puede corregirse a sí mismo. / "
                     "The reader cannot submit their own corrections.",
                 )
+            match_texts: list[str] = []
+            missing_items: list[str] = []
+            for item in items:
+                match_text = find_correction_target(
+                    reading.body,
+                    item,
+                    language=reading.language.value,
+                )
+                if match_text is None:
+                    missing_items.append(item)
+                else:
+                    match_texts.append(match_text)
+            if missing_items:
+                raise SessionError(
+                    "correction_not_in_text",
+                    _missing_corrections_message(missing_items),
+                )
+
             seen_in_submission: set[str] = set()
             seen_by_corrector = {
-                reading._normalize_correction(entry.text)
+                reading._normalize_correction(entry.target_text)
                 for group in reading.correction_groups
                 if group.user_id == corrector_id
                 for entry in group.entries
             }
-            for item in items:
-                normalized = reading._normalize_correction(item)
+            for match_text in match_texts:
+                normalized = reading._normalize_correction(match_text)
                 if normalized in seen_in_submission or normalized in seen_by_corrector:
                     raise SessionError(
                         "duplicate_correction",
@@ -573,12 +588,6 @@ class SessionService:
                         "You already submitted that correction.",
                     )
                 seen_in_submission.add(normalized)
-                if not _contains_correction(reading.body, item):
-                    raise SessionError(
-                        "correction_not_in_text",
-                        "Esa corrección no aparece en el texto original. / "
-                        "That correction does not appear in the original text.",
-                    )
             existing_entries = sum(
                 len(group.entries) for group in reading.correction_groups
             )
@@ -608,6 +617,7 @@ class SessionService:
                 corrector_display_name=corrector_display_name,
                 items=items,
                 source=source,
+                match_texts=match_texts,
             )
             if validator is not None:
                 validator(reading)

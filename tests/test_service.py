@@ -92,6 +92,55 @@ def _assert_error(error: pytest.ExceptionInfo[SessionError], code: str) -> None:
     assert error.value.code == code
 
 
+def test_correction_parser_splits_top_level_commas_and_newlines() -> None:
+    assert parse_correction_lines(
+        "vegetables, looking, produce (noun), baked, performances, variety,"
+    ) == [
+        "vegetables",
+        "looking",
+        "produce (noun)",
+        "baked",
+        "performances",
+        "variety",
+    ]
+    assert parse_correction_lines(
+        " produce (noun, countable), apple,\n\n perro,\n"
+    ) == [
+        "produce (noun, countable)",
+        "apple",
+        "perro",
+    ]
+
+
+async def _prepare_custom_reading(
+    tmp_path: Path,
+    *,
+    language: Language,
+    body: str,
+) -> tuple[SessionService, SQLiteRepository]:
+    service, repository, _ = await _make_service(tmp_path)
+    await _join(service, 10, 20, 30)
+    await service.start(text_channel_id=101, actor_id=10)
+    await service.set_picker_message(
+        text_channel_id=101,
+        reader_id=10,
+        message_id=500,
+    )
+    await service.begin_custom_reading(
+        text_channel_id=101,
+        reader_id=10,
+        picker_message_id=500,
+        language=language,
+        body=body,
+    )
+    await service.set_reading_message(
+        text_channel_id=101,
+        reader_id=10,
+        message_id=700,
+    )
+    return service, repository
+
+
 @pytest.mark.asyncio
 async def test_start_gate_rotation_stats_and_restart_round_trip(
     tmp_path: Path,
@@ -619,6 +668,176 @@ async def test_corrections_preserve_sources_and_reject_stale_ids(
             source_message_id=701,
         )
     _assert_error(stale_turn, "stale_turn")
+
+
+@pytest.mark.asyncio
+async def test_annotated_corrections_match_and_deduplicate_by_base_word(
+    tmp_path: Path,
+) -> None:
+    service, _ = await _prepare_custom_reading(
+        tmp_path,
+        language=Language.ENGLISH,
+        body="They produce fresh food.",
+    )
+
+    first = await service.add_corrections(
+        text_channel_id=101,
+        reading_message_id=700,
+        corrector_id=20,
+        corrector_display_name="Reader 20",
+        items=parse_correction_lines("produce (noun),"),
+        source=CorrectionSource.BUTTON,
+    )
+    assert first.state.active_reading is not None
+    first_entry = first.state.active_reading.correction_groups[0].entries[0]
+    assert first_entry.text == "produce (noun)"
+    assert first_entry.target_text == "produce"
+
+    with pytest.raises(SessionError) as repeated_target:
+        await service.add_corrections(
+            text_channel_id=101,
+            reading_message_id=700,
+            corrector_id=20,
+            corrector_display_name="Reader 20",
+            items=["produce (verb)"],
+            source=CorrectionSource.REPLY,
+        )
+    _assert_error(repeated_target, "duplicate_correction")
+
+    cross_corrector = await service.add_corrections(
+        text_channel_id=101,
+        reading_message_id=700,
+        corrector_id=30,
+        corrector_display_name="Reader 30",
+        items=["produce (verb)"],
+        source=CorrectionSource.REPLY,
+    )
+    assert cross_corrector.state.active_reading is not None
+    second_entry = (
+        cross_corrector.state.active_reading.correction_groups[1].entries[0]
+    )
+    assert second_entry.text == "produce (verb)"
+    assert second_entry.target_text == "produce"
+    assert second_entry.discarded is True
+    assert cross_corrector.state.active_reading.correction_count == 1
+
+
+@pytest.mark.asyncio
+async def test_screenshot_comma_reply_entries_are_all_accepted(
+    tmp_path: Path,
+) -> None:
+    service, _ = await _prepare_custom_reading(
+        tmp_path,
+        language=Language.ENGLISH,
+        body=(
+            "The market has fresh fruits, vegetables, and other local products. "
+            "I enjoy looking at the colorful displays of produce and trying "
+            "samples. There are homemade jams, cheeses, and baked goods. "
+            "There are often live music performances or craft booths. It is "
+            "fun to see the variety of foods."
+        ),
+    )
+
+    accepted = await service.add_corrections(
+        text_channel_id=101,
+        reading_message_id=700,
+        corrector_id=20,
+        corrector_display_name="Reader 20",
+        items=parse_correction_lines(
+            "vegetables, looking, produce (noun), baked, performances, variety,"
+        ),
+        source=CorrectionSource.REPLY,
+    )
+
+    assert accepted.state.active_reading is not None
+    entries = accepted.state.active_reading.correction_groups[0].entries
+    assert [entry.text for entry in entries] == [
+        "vegetables",
+        "looking",
+        "produce (noun)",
+        "baked",
+        "performances",
+        "variety",
+    ]
+    assert [entry.target_text for entry in entries] == [
+        "vegetables",
+        "looking",
+        "produce",
+        "baked",
+        "performances",
+        "variety",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("language", "body", "alias", "target"),
+    [
+        (Language.ENGLISH, "An apple fell.", "🍎", "apple"),
+        (Language.SPANISH, "El perro corre.", "🐕", "perro"),
+    ],
+)
+@pytest.mark.asyncio
+async def test_emoji_aliases_match_language_specific_words_and_preserve_display(
+    tmp_path: Path,
+    language: Language,
+    body: str,
+    alias: str,
+    target: str,
+) -> None:
+    service, _ = await _prepare_custom_reading(
+        tmp_path,
+        language=language,
+        body=body,
+    )
+
+    accepted = await service.add_corrections(
+        text_channel_id=101,
+        reading_message_id=700,
+        corrector_id=20,
+        corrector_display_name="Reader 20",
+        items=[alias],
+        source=CorrectionSource.BUTTON,
+    )
+
+    assert accepted.state.active_reading is not None
+    entry = accepted.state.active_reading.correction_groups[0].entries[0]
+    assert entry.text == alias
+    assert entry.target_text == target
+
+
+@pytest.mark.asyncio
+async def test_all_unmatched_corrections_are_reported_without_partial_commit(
+    tmp_path: Path,
+) -> None:
+    service, repository = await _prepare_custom_reading(
+        tmp_path,
+        language=Language.ENGLISH,
+        body="An apple grows here.",
+    )
+    before = await service.get_session(101)
+
+    with pytest.raises(SessionError) as missing:
+        await service.add_corrections(
+            text_channel_id=101,
+            reading_message_id=700,
+            corrector_id=20,
+            corrector_display_name="Reader 20",
+            items=parse_correction_lines("apple, banana (noun), 🐕"),
+            source=CorrectionSource.BUTTON,
+        )
+
+    _assert_error(missing, "correction_not_in_text")
+    assert "banana (noun)" in missing.value.user_message
+    assert "🐕" in missing.value.user_message
+    after = await service.get_session(101)
+    persisted = await repository.load_session(101)
+    assert before is not None
+    assert after is not None
+    assert persisted is not None
+    assert after.to_dict() == before.to_dict()
+    assert persisted.to_dict() == before.to_dict()
+    assert after.active_reading is not None
+    assert after.active_reading.correction_groups == []
 
 
 @pytest.mark.asyncio

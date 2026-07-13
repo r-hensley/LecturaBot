@@ -889,9 +889,17 @@ class LecturaController:
     ) -> None:
         try:
             if interaction.response.is_done():
-                await interaction.followup.send(message, ephemeral=True)
+                await interaction.followup.send(
+                    message,
+                    ephemeral=True,
+                    allowed_mentions=discord.AllowedMentions.none(),
+                )
             else:
-                await interaction.response.send_message(message, ephemeral=True)
+                await interaction.response.send_message(
+                    message,
+                    ephemeral=True,
+                    allowed_mentions=discord.AllowedMentions.none(),
+                )
         except discord.HTTPException:
             LOGGER.exception("failed to deliver interaction error")
 
