@@ -231,9 +231,22 @@ class TextPickerView(discord.ui.View):
 class ReadingView(discord.ui.View):
     """Controls attached to an active reading and correction summary."""
 
-    def __init__(self, controller: LecturaController) -> None:
+    def __init__(
+        self,
+        controller: LecturaController,
+        *,
+        allow_different_text: bool = True,
+    ) -> None:
         super().__init__(timeout=None)
         self.controller = controller
+        if not allow_different_text:
+            for item in self.children:
+                if (
+                    isinstance(item, discord.ui.Button)
+                    and item.custom_id == "different_catalog_text"
+                ):
+                    self.remove_item(item)
+                    break
 
     @discord.ui.button(
         label="Poner Correcciones / Submit Corrections",
@@ -247,6 +260,19 @@ class ReadingView(discord.ui.View):
         _: discord.ui.Button[ReadingView],
     ) -> None:
         await self.controller.open_correction_modal(interaction)
+
+    @discord.ui.button(
+        label="Otro texto / Different Text",
+        style=discord.ButtonStyle.primary,
+        custom_id="different_catalog_text",
+        row=0,
+    )
+    async def different_text(
+        self,
+        interaction: discord.Interaction,
+        _: discord.ui.Button[ReadingView],
+    ) -> None:
+        await self.controller.handle_different_text(interaction)
 
     @discord.ui.button(
         label="Pasar turno / Pass Turn",

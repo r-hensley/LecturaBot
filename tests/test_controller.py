@@ -172,6 +172,16 @@ class _CorrectionService:
         return Transition(self.state, self.notice)
 
 
+class _ReplacementService:
+    def __init__(self, state: SessionState) -> None:
+        self.state = state
+        self.calls: list[dict[str, Any]] = []
+
+    async def replace_catalog_reading(self, **kwargs: Any) -> Transition:
+        self.calls.append(kwargs)
+        return Transition(self.state, "A different text was selected.")
+
+
 class _ReplyMember:
     bot = False
 
@@ -400,6 +410,51 @@ async def test_turn_transition_reposts_queue_before_sending_next_picker() -> Non
         "retire:600",
         "refresh:True",
         "picker",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_different_text_action_replaces_and_refreshes_current_reading() -> None:
+    events: list[str] = []
+    state = _reading_state()
+    assert state.active_reading is not None
+    state.active_reading.source_text_id = 91
+    service = _ReplacementService(state)
+    pair = ChannelPairConfig(
+        name="sandbox-1",
+        text_channel_id=101,
+        voice_channel_id=201,
+        mode=ChannelMode.STANDARD,
+    )
+    controller = _controller(service, channel_pairs=(pair,))
+    interaction = _FakeInteraction(_FakeMessage(700, "reading", events))
+    member = type("Member", (), {"id": 10})()
+    controller._interaction_context = lambda _interaction: (  # type: ignore[method-assign]
+        pair,
+        member,
+    )
+    controller._require_matching_voice = (  # type: ignore[method-assign]
+        lambda _member, _pair: None
+    )
+
+    async def refresh(refreshed_state: SessionState) -> bool:
+        assert refreshed_state is state
+        events.append("refresh")
+        return True
+
+    controller._refresh_reading = refresh  # type: ignore[method-assign]
+
+    await controller.handle_different_text(interaction)  # type: ignore[arg-type]
+
+    assert interaction.response.defer_calls == [{}]
+    assert len(service.calls) == 1
+    assert service.calls[0]["text_channel_id"] == 101
+    assert service.calls[0]["reader_id"] == 10
+    assert service.calls[0]["reading_message_id"] == 700
+    assert service.calls[0]["validator"] == controller._validate_reading_render
+    assert events == ["refresh"]
+    assert interaction.followup.send_calls == [
+        ("A different text was selected.", {"ephemeral": True})
     ]
 
 

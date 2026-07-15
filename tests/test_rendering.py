@@ -403,6 +403,7 @@ async def test_persistent_views_match_button_contract() -> None:
     assert reading.timeout is None
     assert _button_contract(reading) == [
         ("Poner Correcciones / Submit Corrections", "submit_correction", 3, 0),
+        ("Otro texto / Different Text", "different_catalog_text", 1, 0),
         ("Pasar turno / Pass Turn", "pass_reading", 4, 0),
         (
             "Saltar turno ausente / Skip AFK Turn",
@@ -411,6 +412,14 @@ async def test_persistent_views_match_button_contract() -> None:
             0,
         ),
     ]
+
+    custom_reading = ReadingView(  # type: ignore[arg-type]
+        controller,
+        allow_different_text=False,
+    )
+    assert "different_catalog_text" not in {
+        custom_id for _, custom_id, _, _ in _button_contract(custom_reading)
+    }
 
 
 @pytest.mark.asyncio

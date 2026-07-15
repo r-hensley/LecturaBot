@@ -539,6 +539,79 @@ class SessionService:
                 retired_picker_message_id=picker_message_id,
             )
 
+    async def replace_catalog_reading(
+        self,
+        *,
+        text_channel_id: int,
+        reader_id: int,
+        reading_message_id: int,
+        validator: Callable[[ActiveReading], None] | None = None,
+    ) -> Transition:
+        """Replace the current catalog reading without advancing the turn."""
+        async with self._lock_for(text_channel_id):
+            state = self._snapshot(
+                self._require_state(await self._load_locked(text_channel_id))
+            )
+            self._require_active_source(state, reading_message_id)
+            self._require_current_reader(state, reader_id)
+            current = state.active_reading
+            if (
+                current is None
+                or current.source_text_id is None
+                or current.level is None
+            ):
+                raise SessionError(
+                    "catalog_text_required",
+                    "Solo puedes pedir otro texto para una lectura del catálogo. / "
+                    "You can only request another text for a catalog reading.",
+                )
+
+            candidates = await self.repository.list_texts(
+                language=current.language,
+                level=current.level,
+            )
+            seen_by_reader = state.seen_text_ids_by_user.get(reader_id, set())
+            unused = [
+                text
+                for text in candidates
+                if text.id != current.source_text_id
+                and text.id not in seen_by_reader
+            ]
+            if not unused:
+                raise SessionError(
+                    "no_alternative_texts",
+                    "No quedan otros textos sin leer de este idioma y nivel "
+                    "durante esta sesión. / No other unread texts remain in "
+                    "this language and level for this session.",
+                )
+
+            selected = self._chooser(unused)
+            state.used_text_ids.update((current.source_text_id, selected.id))
+            reader_history = state.seen_text_ids_by_user.setdefault(
+                reader_id,
+                set(),
+            )
+            reader_history.update((current.source_text_id, selected.id))
+            self._begin_reading(
+                state,
+                language=selected.language,
+                level=selected.level,
+                body=selected.body,
+                expected_emotion=selected.expected_emotion,
+                source_text_id=selected.id,
+            )
+            replacement = state.active_reading
+            if replacement is None:  # Defensive: _begin_reading always sets it.
+                raise RuntimeError("replacement reading was not created")
+            replacement.message_id = reading_message_id
+            if validator is not None:
+                validator(replacement)
+            await self._persist_locked(state)
+            return Transition(
+                self._snapshot(state),
+                "Se seleccionó otro texto. / A different text was selected.",
+            )
+
     async def rollback_reading(
         self,
         *,

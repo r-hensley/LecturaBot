@@ -250,6 +250,36 @@ class LecturaController:
             LOGGER.exception("failed to open custom-text modal")
             await self._send_error(interaction, self._generic_error())
 
+    async def handle_different_text(self, interaction: discord.Interaction) -> None:
+        """Replace the current reader's catalog passage in the same message."""
+        try:
+            pair, member = self._interaction_context(interaction)
+            self._require_matching_voice(member, pair)
+            if interaction.message is None:
+                raise self._stale_turn()
+            await interaction.response.defer()
+            async with self._ui_lock_for(pair.text_channel_id):
+                transition = await self.service.replace_catalog_reading(
+                    text_channel_id=pair.text_channel_id,
+                    reader_id=member.id,
+                    reading_message_id=interaction.message.id,
+                    validator=self._validate_reading_render,
+                )
+                if not await self._refresh_reading(transition.state):
+                    raise RuntimeError("active reading message is unavailable")
+            await interaction.followup.send(transition.notice, ephemeral=True)
+        except SessionError as error:
+            await self._send_error(interaction, error.user_message)
+        except RenderError as error:
+            LOGGER.warning(
+                "replacement catalog text could not be rendered: %s",
+                error,
+            )
+            await self._send_error(interaction, self._generic_error())
+        except Exception:
+            LOGGER.exception("different-text action failed")
+            await self._send_error(interaction, self._generic_error())
+
     async def submit_custom_text(
         self,
         interaction: discord.Interaction,
@@ -568,7 +598,10 @@ class LecturaController:
         message = await channel.send(
             content=content,
             embed=embed,
-            view=ReadingView(self),
+            view=ReadingView(
+                self,
+                allow_different_text=reading.source_text_id is not None,
+            ),
             allowed_mentions=discord.AllowedMentions.none(),
         )
         try:
@@ -762,7 +795,10 @@ class LecturaController:
         await message.edit(
             content=build_reading_content(reading),
             embed=build_corrections_embed(reading),
-            view=ReadingView(self),
+            view=ReadingView(
+                self,
+                allow_different_text=reading.source_text_id is not None,
+            ),
             allowed_mentions=discord.AllowedMentions.none(),
         )
         return True

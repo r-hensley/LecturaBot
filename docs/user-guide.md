@@ -21,8 +21,10 @@ corrections, and reading-time statistics.
    wait for more readers to join.
 6. When the bot mentions you, choose a language and level or submit your own
    text.
-7. Read the displayed passage aloud. Other people in the voice channel can
-   submit pronunciation corrections.
+7. Read the displayed passage aloud. If it is a catalog passage you do not want,
+   click **Otro texto / Different Text** to receive another passage from the
+   same language and level. Other people in the voice channel can submit
+   pronunciation corrections.
 8. Review the corrections, then click **Pasar turno / Pass Turn**. Only the
    current reader can use this button. The bot moves to the next reader and
    publishes a fresh queue panel.
@@ -79,6 +81,13 @@ leave/rejoin as long as somebody keeps the room session alive. If you use every
 passage in one language/level, the bot does not start repeating them; choose
 another level or submit your own text. The history resets only after the room's
 queue becomes empty and the session ends.
+
+If you do not want the displayed catalog passage, click **Otro texto / Different
+Text**. The bot replaces it in the same message with another unseen passage from
+the same language and level. The rejected passage remains in your session
+history so it cannot immediately return. This restarts the reading timer but
+does not advance your turn or count as a completed reading. The button is not
+shown for a passage you supplied yourself.
 
 To bring your own passage, choose one of these instead:
 
@@ -154,6 +163,8 @@ verify native-language roles.
 - The **current reader** clicks **Pasar turno / Pass Turn** after reviewing the
   corrections. No other participant can use Pass Turn. A completed reading is
   added to that reader's statistics.
+- **Otro texto / Different Text** changes only the current catalog passage. It
+  does not skip the reader's turn or add a completed reading to statistics.
 - To force an absent reader's turn to end, use the separate **Saltar turno
   ausente / Skip AFK Turn** button. Exactly three different queued,
   non-current readers must vote. A person can vote only once per turn, and the
@@ -230,8 +241,9 @@ behavior or reading-text problems.
    esperar a que se unan más lectores.
 6. Cuando el bot te mencione, elige un idioma y nivel o proporciona tu propio
    texto.
-7. Lee el texto en voz alta. Las otras personas del canal de voz pueden enviar
-   correcciones de pronunciación.
+7. Lee el texto en voz alta. Si no quieres el texto del catálogo, pulsa **Otro
+   texto / Different Text** para recibir otro del mismo idioma y nivel. Las
+   otras personas del canal de voz pueden enviar correcciones de pronunciación.
 8. Revisa las correcciones y pulsa **Pasar turno / Pass Turn**. Solo el lector
    actual puede usar este botón. El bot pasará al siguiente lector y publicará
    un panel nuevo de la cola.
@@ -306,6 +318,13 @@ normales de inglés y español.
 Si no quieres leer durante tu turno, pulsa **Pasar Turno / Pass Turn** en el
 selector de textos.
 
+Si no quieres el texto del catálogo que aparece, pulsa **Otro texto / Different
+Text**. El bot lo reemplazará en el mismo mensaje por otro texto no visto del
+mismo idioma y nivel. El texto rechazado permanecerá en tu historial de la
+sesión para que no vuelva a aparecer inmediatamente. Esto reinicia el
+cronómetro de lectura, pero no avanza el turno ni cuenta como una lectura
+completada. El botón no aparece en los textos que proporcionas tú mismo.
+
 ### Envía correcciones
 
 Debes estar escuchando en el canal de voz correspondiente, pero **no** necesitas
@@ -360,6 +379,8 @@ los roles de idioma nativo.
 - El **lector actual** pulsa **Pasar turno / Pass Turn** después de revisar las
   correcciones. Ningún otro participante puede usar Pass Turn. La lectura
   completada se añade a sus estadísticas.
+- **Otro texto / Different Text** solo cambia el texto actual del catálogo. No
+  salta el turno del lector ni añade una lectura completada a las estadísticas.
 - Para forzar el fin del turno de una persona ausente, pulsa el botón separado
   **Saltar turno ausente / Skip AFK Turn**. Deben votar exactamente tres
   lectores distintos que estén en la cola y que no sean el lector actual. Cada

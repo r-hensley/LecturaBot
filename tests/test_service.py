@@ -9,6 +9,7 @@ import pytest
 
 from lecturabot.config import ChannelPairConfig
 from lecturabot.models import (
+    ActiveReading,
     ChannelMode,
     CorrectionSource,
     Language,
@@ -766,6 +767,186 @@ async def test_catalog_and_custom_only_selection_enforce_picker_and_mode(
     assert own_text.state.active_reading.body == "こんにちは。"
     assert own_text.state.active_reading.level is None
     assert own_text.state.active_reading.custom_language_label == "日本語"
+
+
+@pytest.mark.asyncio
+async def test_current_reader_can_replace_catalog_text_without_advancing_turn(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service, repository, clock = await _make_service(tmp_path)
+    catalog = [
+        ReadingText(
+            id=9_001,
+            language=Language.ENGLISH,
+            level=Level.BEGINNER,
+            body="First catalog passage.",
+        ),
+        ReadingText(
+            id=9_002,
+            language=Language.ENGLISH,
+            level=Level.BEGINNER,
+            body="Second catalog passage.",
+            expected_emotion="Relief",
+        ),
+    ]
+    monkeypatch.setattr(
+        repository,
+        "list_texts",
+        AsyncMock(return_value=catalog),
+    )
+    await _join(service, 10, 20)
+    await service.start(text_channel_id=101, actor_id=10)
+    await service.set_picker_message(
+        text_channel_id=101,
+        reader_id=10,
+        message_id=500,
+    )
+    selected = await service.begin_catalog_reading(
+        text_channel_id=101,
+        reader_id=10,
+        picker_message_id=500,
+        language=Language.ENGLISH,
+        level=Level.BEGINNER,
+    )
+    assert selected.state.active_reading is not None
+    await service.set_reading_message(
+        text_channel_id=101,
+        reader_id=10,
+        message_id=700,
+    )
+    await service.add_corrections(
+        text_channel_id=101,
+        reading_message_id=700,
+        corrector_id=20,
+        corrector_display_name="Listener",
+        items=["First"],
+        source=CorrectionSource.BUTTON,
+    )
+    await service.vote_to_skip(
+        text_channel_id=101,
+        voter_id=20,
+        source_message_id=700,
+    )
+    before = await service.get_session(101)
+    assert before is not None
+    assert before.active_reading is not None
+    original_turn_started_at = before.turn_started_at
+    clock.value += 30
+    validated: list[ActiveReading] = []
+
+    replaced = await service.replace_catalog_reading(
+        text_channel_id=101,
+        reader_id=10,
+        reading_message_id=700,
+        validator=validated.append,
+    )
+
+    reading = replaced.state.active_reading
+    assert reading is not None
+    assert reading.source_text_id == 9_002
+    assert reading.body == "Second catalog passage."
+    assert reading.expected_emotion == "Relief"
+    assert reading.message_id == 700
+    assert reading.started_at == clock.value
+    assert reading.correction_groups == []
+    assert replaced.state.phase is SessionPhase.READING
+    assert replaced.state.current_user_id == 10
+    assert replaced.state.turn_started_at == original_turn_started_at
+    assert replaced.state.skip_votes == set()
+    assert replaced.state.used_text_ids == {9_001, 9_002}
+    assert replaced.state.seen_text_ids_by_user == {10: {9_001, 9_002}}
+    assert replaced.advanced is False
+    assert validated == [reading]
+
+
+@pytest.mark.asyncio
+async def test_catalog_replacement_rejects_stale_nonreader_and_exhaustion(
+    tmp_path: Path,
+) -> None:
+    service, _, _ = await _make_service(tmp_path)
+    await _join(service, 10, 20)
+    await service.start(text_channel_id=101, actor_id=10)
+    await service.set_picker_message(
+        text_channel_id=101,
+        reader_id=10,
+        message_id=500,
+    )
+    await service.begin_catalog_reading(
+        text_channel_id=101,
+        reader_id=10,
+        picker_message_id=500,
+        language=Language.ENGLISH,
+        level=Level.BEGINNER,
+    )
+    await service.set_reading_message(
+        text_channel_id=101,
+        reader_id=10,
+        message_id=700,
+    )
+    before = await service.get_session(101)
+    assert before is not None
+
+    with pytest.raises(SessionError) as stale:
+        await service.replace_catalog_reading(
+            text_channel_id=101,
+            reader_id=10,
+            reading_message_id=999,
+        )
+    _assert_error(stale, "stale_turn")
+
+    with pytest.raises(SessionError) as nonreader:
+        await service.replace_catalog_reading(
+            text_channel_id=101,
+            reader_id=20,
+            reading_message_id=700,
+        )
+    _assert_error(nonreader, "not_current_reader")
+
+    with pytest.raises(SessionError) as exhausted:
+        await service.replace_catalog_reading(
+            text_channel_id=101,
+            reader_id=10,
+            reading_message_id=700,
+        )
+    _assert_error(exhausted, "no_alternative_texts")
+    after = await service.get_session(101)
+    assert after is not None
+    assert after.to_dict() == before.to_dict()
+
+
+@pytest.mark.asyncio
+async def test_custom_text_cannot_be_replaced_from_catalog(
+    tmp_path: Path,
+) -> None:
+    service, _, _ = await _make_service(tmp_path)
+    await _join(service, 10)
+    await service.start(text_channel_id=101, actor_id=10)
+    await service.set_picker_message(
+        text_channel_id=101,
+        reader_id=10,
+        message_id=500,
+    )
+    await service.begin_custom_reading(
+        text_channel_id=101,
+        reader_id=10,
+        picker_message_id=500,
+        language=Language.ENGLISH,
+        body="My own passage.",
+    )
+    await service.set_reading_message(
+        text_channel_id=101,
+        reader_id=10,
+        message_id=700,
+    )
+
+    with pytest.raises(SessionError) as custom:
+        await service.replace_catalog_reading(
+            text_channel_id=101,
+            reader_id=10,
+            reading_message_id=700,
+        )
+    _assert_error(custom, "catalog_text_required")
 
 
 @pytest.mark.asyncio

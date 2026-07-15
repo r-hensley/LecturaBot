@@ -22,7 +22,8 @@ LecturaBot is a professional proof of concept for a bilingual Discord reading-se
 - Free-form correction annotations, including parenthesized sentences and
   custom emojis, remain listed even when no source highlight is found
 - Grouped correction attribution, with later cross-corrector duplicates struck through
-- Current-reader-only pass and a separate, fixed three-vote AFK skip action
+- Current-reader-only pass, same-level catalog-text replacement, and a separate,
+  fixed three-vote AFK skip action
 - Per-guild/user completed-turn totals and average reading time, reset after six
   hours without a normally completed reading
 - Numbered queue panels in upcoming-turn order, republished on request and for new reader turns
@@ -44,6 +45,9 @@ LecturaBot is a professional proof of concept for a bilingual Discord reading-se
   next queue refresh. Joining, leaving, selection-only passes, AFK skips, and
   other users' turns do not extend the window.
 - **Pasar turno / Pass Turn** is available only to the current reader. A separate **Saltar turno ausente / Skip AFK Turn** action requires three unique votes from queued, non-current readers; the threshold is never reduced when fewer voters are available.
+- **Otro texto / Different Text** replaces a catalog passage with another
+  unseen passage from the same language and level without advancing or counting
+  the turn. It is not shown for user-supplied texts.
 - Correction counts de-duplicate the normalized match target when one exists,
   otherwise the submitted text. Attribution groups retain each corrector's
   entry, but a later duplicate from another corrector is rendered as
