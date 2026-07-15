@@ -44,9 +44,9 @@ The implementation follows the observed behavior in [EXPECTED_OPERATION.md](EXPE
 - Reading time runs from publication of the reading text until a normal
   current-reader pass. That completion starts or extends only that user's
   six-hour statistics window. After six hours without another normal
-  completion, both `turns` and average return to `n/a` on the next queue
-  refresh. Joining, leaving, selection-only passes, AFK skips, and other users'
-  turns do not extend the window.
+  completion, `turns` returns to `0` and the average returns to `n/a` on the
+  next queue refresh. Joining, leaving, selection-only passes, AFK skips, and
+  other users' turns do not extend the window.
 - **Pasar turno / Pass Turn** is available only to the current reader. A separate **Saltar turno ausente / Skip AFK Turn** action requires three unique votes from queued, non-current readers; the threshold is never reduced when fewer voters are available.
 - Correction counts de-duplicate the normalized match target when one exists,
   otherwise the submitted text. Attribution groups retain each corrector's

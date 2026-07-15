@@ -56,7 +56,7 @@ def test_active_and_empty_queue_embeds_match_metadata_contract() -> None:
     assert embed.description == (
         "**-- Cola / Queue --**\n"
         "__**1. --> <@200> <--** | turns: *4* | avg reading time: *05:12*__\n"
-        "**2.** <@100> | turns: *n/a* | avg reading time: *n/a*\n"
+        "**2.** <@100> | turns: *0* | avg reading time: *n/a*\n"
         "\n"
         "Turno actual comenzó / Current turn started <t:1720000000:R>\n"
         "Bot not working? → <@900>\n"
@@ -104,7 +104,7 @@ def test_waiting_queue_positions_follow_join_order() -> None:
 
     assert embed.description == (
         "**-- Cola / Queue --**\n"
-        "**1.** <@100> | turns: *n/a* | avg reading time: *n/a*\n"
+        "**1.** <@100> | turns: *0* | avg reading time: *n/a*\n"
         "**2.** <@200> | turns: *1* | avg reading time: *01:05*\n"
         "\n"
         "Bot not working? → <@900>\n"

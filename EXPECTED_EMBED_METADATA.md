@@ -130,13 +130,13 @@ if text problem: ping <@{text_contact_user_id}>
 Normal member row:
 
 ```md
-<@{user_id}> | turns: *{turn_count_or_n/a}* | avg reading time: *{MM:SS_or_n/a}*
+<@{user_id}> | turns: *{turn_count}* | avg reading time: *{MM:SS_or_n/a}*
 ```
 
 Current-reader row:
 
 ```md
-__**--> <@{user_id}> <--** | turns: *{turn_count_or_n/a}* | avg reading time: *{MM:SS_or_n/a}*__
+__**--> <@{user_id}> <--** | turns: *{turn_count}* | avg reading time: *{MM:SS_or_n/a}*__
 ```
 
 The current-reader row keeps the arrow and mention bold while underlining the entire row. The current reader is not necessarily the first displayed member.
@@ -173,13 +173,13 @@ changing the durable join order. The current reader is always display position
 Numbered current-reader row:
 
 ```md
-__**1. --> <@{current_user_id}> <--** | turns: *{turn_count_or_n/a}* | avg reading time: *{MM:SS_or_n/a}*__
+__**1. --> <@{current_user_id}> <--** | turns: *{turn_count}* | avg reading time: *{MM:SS_or_n/a}*__
 ```
 
 Numbered upcoming-reader row:
 
 ```md
-**{upcoming_position}.** <@{user_id}> | turns: *{turn_count_or_n/a}* | avg reading time: *{MM:SS_or_n/a}*
+**{upcoming_position}.** <@{user_id}> | turns: *{turn_count}* | avg reading time: *{MM:SS_or_n/a}*
 ```
 
 The member statistics are mandatory on every active row. After a normal
@@ -189,8 +189,9 @@ values.
 
 These values cover an independent six-hour inactivity window for each server
 member. A normal completed reading starts or extends that user's window. At
-exactly six hours without another normal completion, both values render as
-`n/a` on the next queue refresh; the next completion starts again at `turns: 1`.
+exactly six hours without another normal completion, `turns` renders as `0` and
+the average renders as `n/a` on the next queue refresh; the next completion
+starts again at `turns: 1`.
 Joining or leaving a queue, starting a rotation, selection-only passes, AFK
 skips, and other users' completions do not extend the window. An existing
 Discord message is not expected to update itself at the exact expiry instant.
@@ -795,9 +796,9 @@ original bot:
       reader `2`, then the remainder of the rotation.
 - [ ] Show `turns` and `avg reading time` on every active member row and render
       completed-reading updates in the next fresh panel.
-- [ ] Reset both statistics to `n/a` on the next queue refresh after that user
-      goes six hours without a normal completed reading; do not extend the
-      window for queue activity, AFK skips, or another user's turn.
+- [ ] Render `turns: 0` and `avg reading time: n/a` on the next queue refresh
+      after that user goes six hours without a normal completed reading; do not
+      extend the window for queue activity, AFK skips, or another user's turn.
 - [ ] Publish a fresh queue panel after every queue departure and turn change,
       then retire the superseded panel's controls.
 - [ ] Allow only the current reader to pass; require three unique queued,

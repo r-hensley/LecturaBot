@@ -391,8 +391,8 @@ original channel export.
 ### Clone requirements from live POC testing
 
 - Completed-turn totals and average reading time are always included on active
-  numbered queue rows, including `n/a` for users without an active completed
-  reading statistics window.
+  numbered queue rows. Users without an active completed-reading statistics
+  window show `turns: 0` and `avg reading time: n/a`.
 - A normally completed reading is recorded before the next turn's fresh queue
   panel is rendered, so the just-finished reader's `turns` and
   `avg reading time` values are immediately visible there.
@@ -401,9 +401,9 @@ original channel export.
   The window remains active while less than six hours have elapsed since the
   last normal completion; at exactly six hours it is expired.
 - Expiration resets both the completed-turn count and accumulated reading time,
-  so the next queue refresh renders both `turns` and `avg reading time` as
-  `n/a`. The user's next normal completion starts a fresh window at `turns: 1`,
-  with its duration as the new average.
+  so the next queue refresh renders `turns: 0` and `avg reading time: n/a`. The
+  user's next normal completion starts a fresh window at `turns: 1`, with its
+  duration as the new average.
 - AFK skips, voice/queue departures, and turns passed before a reading is
   published do not count as completed readings and do not extend the window.
   Joining, starting a queue, and other participants' completions also do not

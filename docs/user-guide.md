@@ -175,8 +175,10 @@ The queue panel shows:
   statistics window
 - `avg reading time`: your average completed reading time in that same window,
   formatted as `MM:SS`
-- `n/a`: you do not currently have a completed reading in an active statistics
-  window
+- `turns: 0`: you do not currently have a completed reading in an active
+  statistics window
+- `avg reading time: n/a`: there is no active completed reading from which to
+  calculate an average
 
 Reading time begins when the bot publishes the selected passage and ends when
 the current reader presses **Pass Turn**. The newly completed reading and its
@@ -184,11 +186,12 @@ updated statistics appear in the fresh queue panel for the next turn.
 
 Each person has an independent statistics window. A normal completed reading
 starts or extends it for six hours from that completion. After exactly six
-hours without another normal completion, both values reset to `n/a` on the next
-queue refresh; the next completed reading starts again at `turns: 1`. Joining,
-leaving, starting a queue, selection-only passes, AFK skips, and other users'
-turns do not extend your window. An already-posted Discord panel updates when
-the queue is next refreshed rather than changing by itself at the expiry time.
+hours without another normal completion, `turns` resets to `0` and the average
+resets to `n/a` on the next queue refresh; the next completed reading starts
+again at `turns: 1`. Joining, leaving, starting a queue, selection-only passes,
+AFK skips, and other users' turns do not extend your window. An already-posted
+Discord panel updates when the queue is next refreshed rather than changing by
+itself at the expiry time.
 
 ### Common problems
 

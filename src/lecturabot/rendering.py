@@ -64,7 +64,7 @@ def build_queue_embed(
     current_user_id = state.current_user_id
     for position, user_id in enumerate(display_queue, start=1):
         member = state.members[user_id]
-        turns = "n/a" if member.turns == 0 else str(member.turns)
+        turns = str(member.turns)
         average = format_average(member.average_seconds)
         if user_id == current_user_id:
             lines.append(
