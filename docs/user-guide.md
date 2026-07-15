@@ -139,7 +139,11 @@ bold while its trailing parenthetical annotation remains regular. If another
 corrector later submits a word or phrase that has already been suggested, the
 later duplicate remains attributed to that corrector with the duplicated word
 `~~struck through~~` to show that it was discarded. Any trailing parenthetical
-annotation remains regular rather than being struck through.
+annotation remains regular rather than being struck through. Duplicate base
+words are compared case-insensitively even when they cannot be highlighted in
+the reading. A corrector may submit the same base again with a changed comment;
+the new entry is listed with its duplicate base struck through, while submitting
+the same full correction twice is still rejected.
 
 Please submit corrections only when the reader is practicing your native
 language. This is a community rule even though the bot does not currently

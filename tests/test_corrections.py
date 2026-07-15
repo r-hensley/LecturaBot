@@ -2,7 +2,12 @@ from __future__ import annotations
 
 import pytest
 
-from lecturabot.corrections import find_correction_target, split_correction_items
+from lecturabot.corrections import (
+    correction_base_text,
+    find_correction_target,
+    split_correction_annotation,
+    split_correction_items,
+)
 
 
 def test_split_corrections_keeps_parenthetical_commas_in_one_item() -> None:
@@ -17,6 +22,27 @@ def test_split_corrections_keeps_parenthetical_commas_in_one_item() -> None:
         "moment",
         "(a whole sentence, explaining the pronunciation)",
     ]
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("Factos (test, ignore this)", ("Factos", " (test, ignore this)")),
+        ("like this one", ("like this one", "")),
+        ("(encouragement only)", ("", "(encouragement only)")),
+        ("word (unfinished", ("word (unfinished", "")),
+    ],
+)
+def test_split_correction_annotation_finds_only_trailing_balanced_comment(
+    value: str,
+    expected: tuple[str, str],
+) -> None:
+    assert split_correction_annotation(value) == expected
+
+
+def test_correction_base_text_ignores_optional_comment() -> None:
+    assert correction_base_text("Factos (test, ignore this)") == "Factos"
+    assert correction_base_text("(encouragement only)") == "(encouragement only)"
 
 
 @pytest.mark.parametrize(

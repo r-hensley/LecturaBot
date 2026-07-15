@@ -9,7 +9,10 @@ import random
 import time
 
 from .config import ChannelPairConfig
-from .corrections import find_correction_target, split_correction_items
+from .corrections import (
+    find_correction_target,
+    split_correction_items,
+)
 from .models import (
     ActiveReading,
     ChannelMode,
@@ -620,14 +623,17 @@ class SessionService:
 
             seen_in_submission: set[str] = set()
             seen_by_corrector = {
-                reading._normalize_correction(entry.target_text)
+                reading._normalize_correction(entry.text)
                 for group in reading.correction_groups
                 if group.user_id == corrector_id
                 for entry in group.entries
             }
-            for item, match_text in zip(items, match_texts, strict=True):
-                normalized = reading._normalize_correction(match_text or item)
-                if normalized in seen_in_submission or normalized in seen_by_corrector:
+            for item in items:
+                normalized = reading._normalize_correction(item)
+                if (
+                    normalized in seen_in_submission
+                    or normalized in seen_by_corrector
+                ):
                     raise SessionError(
                         "duplicate_correction",
                         "Esa corrección ya fue enviada por ti. / "

@@ -6,7 +6,7 @@ import re
 
 import discord
 
-from .corrections import correction_pattern
+from .corrections import correction_pattern, split_correction_annotation
 from .models import ActiveReading, Language, Level, SessionState
 
 
@@ -119,23 +119,9 @@ def _escape_correction_text(value: str) -> str:
 def _format_correction_text(value: str, *, discarded: bool = False) -> str:
     """Style the correction while leaving a trailing annotation unchanged."""
     marker = "~~" if discarded else "**"
-    parenthesis_depth = 0
-    annotation_start: int | None = None
-    for index, character in enumerate(value):
-        if character == "(":
-            if parenthesis_depth == 0:
-                annotation_start = index
-            parenthesis_depth += 1
-        elif character == ")" and parenthesis_depth:
-            parenthesis_depth -= 1
-            if parenthesis_depth == 0 and value[index + 1 :].strip():
-                annotation_start = None
-
-    if annotation_start is None or parenthesis_depth:
+    correction, annotation = split_correction_annotation(value)
+    if not annotation:
         return f"{marker}{_escape_correction_text(value)}{marker}"
-
-    correction = value[:annotation_start].rstrip()
-    annotation = value[len(correction) :]
     if not correction:
         return _escape_correction_text(value)
     return (

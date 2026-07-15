@@ -1042,16 +1042,31 @@ async def test_annotated_corrections_match_and_deduplicate_by_base_word(
     assert first_entry.text == "produce (noun)"
     assert first_entry.target_text == "produce"
 
-    with pytest.raises(SessionError) as repeated_target:
+    changed_comment = await service.add_corrections(
+        text_channel_id=101,
+        reading_message_id=700,
+        corrector_id=20,
+        corrector_display_name="Reader 20",
+        items=["produce (verb)"],
+        source=CorrectionSource.REPLY,
+    )
+    assert changed_comment.state.active_reading is not None
+    changed_entry = (
+        changed_comment.state.active_reading.correction_groups[0].entries[1]
+    )
+    assert changed_entry.target_text == "produce"
+    assert changed_entry.discarded is True
+
+    with pytest.raises(SessionError) as repeated_full_correction:
         await service.add_corrections(
             text_channel_id=101,
             reading_message_id=700,
             corrector_id=20,
             corrector_display_name="Reader 20",
-            items=["produce (verb)"],
+            items=["PRODUCE (VERB)"],
             source=CorrectionSource.REPLY,
         )
-    _assert_error(repeated_target, "duplicate_correction")
+    _assert_error(repeated_full_correction, "duplicate_correction")
 
     cross_corrector = await service.add_corrections(
         text_channel_id=101,
@@ -1069,6 +1084,53 @@ async def test_annotated_corrections_match_and_deduplicate_by_base_word(
     assert second_entry.target_text == "produce"
     assert second_entry.discarded is True
     assert cross_corrector.state.active_reading.correction_count == 1
+
+
+@pytest.mark.asyncio
+async def test_unmatched_comments_use_case_insensitive_base_for_duplicates(
+    tmp_path: Path,
+) -> None:
+    service, _ = await _prepare_custom_reading(
+        tmp_path,
+        language=Language.ENGLISH,
+        body="This text does not contain the submitted correction.",
+    )
+
+    await service.add_corrections(
+        text_channel_id=101,
+        reading_message_id=700,
+        corrector_id=20,
+        corrector_display_name="Reader 20",
+        items=["Factos"],
+        source=CorrectionSource.BUTTON,
+    )
+    await service.add_corrections(
+        text_channel_id=101,
+        reading_message_id=700,
+        corrector_id=30,
+        corrector_display_name="Reader 30",
+        items=["factos (test, ignore this)"],
+        source=CorrectionSource.REPLY,
+    )
+    changed_comment = await service.add_corrections(
+        text_channel_id=101,
+        reading_message_id=700,
+        corrector_id=30,
+        corrector_display_name="Reader 30",
+        items=["Factos (testing again, ignore again)"],
+        source=CorrectionSource.REPLY,
+    )
+
+    assert changed_comment.state.active_reading is not None
+    reading = changed_comment.state.active_reading
+    first_group, second_group = reading.correction_groups
+    assert first_group.entries[0].discarded is False
+    assert [entry.target_text for entry in second_group.entries] == [
+        "factos",
+        "Factos",
+    ]
+    assert all(entry.discarded for entry in second_group.entries)
+    assert reading.correction_count == 1
 
 
 @pytest.mark.asyncio

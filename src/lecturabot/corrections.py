@@ -60,6 +60,38 @@ def split_correction_items(raw_value: str) -> list[str]:
     return items
 
 
+def split_correction_annotation(value: str) -> tuple[str, str]:
+    """Separate a trailing parenthetical comment from its correction text.
+
+    The returned comment retains its leading whitespace. Fully parenthesized
+    feedback has no base correction, while unbalanced or non-trailing
+    parentheses remain part of the correction text.
+    """
+    parenthesis_depth = 0
+    annotation_start: int | None = None
+    for index, character in enumerate(value):
+        if character == "(":
+            if parenthesis_depth == 0:
+                annotation_start = index
+            parenthesis_depth += 1
+        elif character == ")" and parenthesis_depth:
+            parenthesis_depth -= 1
+            if parenthesis_depth == 0 and value[index + 1 :].strip():
+                annotation_start = None
+
+    if annotation_start is None or parenthesis_depth:
+        return value, ""
+
+    correction = value[:annotation_start].rstrip()
+    return correction, value[len(correction) :]
+
+
+def correction_base_text(value: str) -> str:
+    """Return the base used to compare corrections with optional comments."""
+    correction, annotation = split_correction_annotation(value)
+    return correction if correction and annotation else value
+
+
 def correction_pattern(correction: str) -> str:
     """Build a case-insensitive-ready literal pattern with word boundaries."""
 

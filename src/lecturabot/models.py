@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
 
+from .corrections import correction_base_text
+
 
 SESSION_SNAPSHOT_VERSION = 1
 
@@ -89,10 +91,10 @@ class CorrectionEntry:
         """Stable comparison text for this listed suggestion.
 
         Matched entries use their source-text target. Unmatched feedback falls
-        back to the text the corrector submitted so it can still participate in
-        counting and duplicate handling without becoming a reading highlight.
+        back to the submitted base correction without its optional trailing
+        comment so annotations do not hide case-insensitive duplicates.
         """
-        return self.match_text or self.text
+        return self.match_text or correction_base_text(self.text)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -216,19 +218,18 @@ class ActiveReading:
         # Groups are organized by corrector for display, not submission time.
         # Persist the discard decision now so a later submission to an earlier
         # group cannot make rendering infer the chronology incorrectly.
-        owners_by_suggestion: dict[str, set[int]] = {}
+        seen_suggestions: set[str] = set()
         for existing_group in self.correction_groups:
             for entry in existing_group.entries:
                 normalized = self._normalize_correction(entry.target_text)
                 if normalized:
-                    owners_by_suggestion.setdefault(normalized, set()).add(
-                        existing_group.user_id
-                    )
+                    seen_suggestions.add(normalized)
 
         for item, match_text in zip(items, match_texts, strict=True):
-            normalized = self._normalize_correction(match_text or item)
-            prior_owners = owners_by_suggestion.get(normalized, set())
-            discarded = bool(prior_owners - {corrector_id})
+            normalized = self._normalize_correction(
+                match_text or correction_base_text(item)
+            )
+            discarded = normalized in seen_suggestions
             group.entries.append(
                 CorrectionEntry(
                     item,
@@ -238,9 +239,7 @@ class ActiveReading:
                 )
             )
             if normalized:
-                owners_by_suggestion.setdefault(normalized, set()).add(
-                    corrector_id
-                )
+                seen_suggestions.add(normalized)
 
     @staticmethod
     def _normalize_correction(value: str) -> str:
