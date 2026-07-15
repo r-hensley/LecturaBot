@@ -253,9 +253,10 @@ availability.
 | Super Hard / Super Difícil | Advanced / Avanzado |
 | SFW Halloween | Advanced / Avanzado |
 
-The original 12 POC passages remain a separate seed, giving the packaged catalog
-1,026 total passages. Startup inserts both seed files idempotently into SQLite,
-then disables catalog retirements so removals also apply to existing databases.
+The original 12 POC passages are retired. The packaged catalog contains the
+1,014 generated passages. Startup inserts that seed idempotently into SQLite,
+then disables catalog retirements so the POC removal also applies to existing
+databases.
 
 ### Clone requirements from live POC testing
 

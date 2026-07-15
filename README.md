@@ -17,7 +17,7 @@ The implementation follows the observed behavior in [EXPECTED_OPERATION.md](EXPE
 - Voice-channel validation and automatic removal after leaving voice
 - Persistent, stale-safe queue, picker, and reading controls
 - Single-participant sessions, with the same rotation flow used for groups
-- Beginner, Intermediate, and Advanced catalog choices backed by 1,026 bundled English and Spanish passages
+- Beginner, Intermediate, and Advanced catalog choices backed by 1,014 bundled English and Spanish passages
 - Custom-text modal, including a language label in the Other Languages channel
 - Correction modal and reply-to-reading correction capture, with newline or
   top-level-comma separated entries
@@ -116,14 +116,14 @@ For quick slash-command updates during development, set `dev_guild_id` in `confi
 ## Reading catalog
 
 The bot does not contact Google Docs while running. At startup it idempotently
-seeds SQLite from two packaged files, then disables entries listed in the
+seeds SQLite from the packaged catalog, then disables entries listed in the
 packaged retirement file:
 
-- `data/readings.json`: the original 12 POC passages
 - `data/google_doc_readings.json`: 1,014 passages generated from the committed
   snapshot of the community's **Texts for Sesión de Lectura** document
 - `data/retired_readings.json`: passages intentionally excluded from selection,
-  including copies already present in an existing database
+  including the original 12 POC passages and copies already present in an
+  existing database
 
 The raw export is kept at `sources/google_doc_readings.txt`. Its original Easy,
 Medium, Hard, Super Hard, and SFW Halloween categories are retained as metadata.
@@ -173,9 +173,6 @@ src/lecturabot/
   repository.py   SQLite schema, catalog, snapshots, and statistics
   service.py      Locked state machine and domain rules
   views.py        Persistent views and input modals
-
-src/lecturabot/data/readings.json
-  Original 12-passage POC seed catalog
 
 src/lecturabot/data/google_doc_readings.json
   Generated 1,014-passage offline Google Doc catalog

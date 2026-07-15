@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 from pathlib import Path
 from unittest.mock import AsyncMock
 
@@ -21,15 +22,6 @@ from lecturabot.service import (
     SessionError,
     SessionService,
     parse_correction_lines,
-)
-
-
-SEED_PATH = (
-    Path(__file__).parents[1]
-    / "src"
-    / "lecturabot"
-    / "data"
-    / "readings.json"
 )
 
 
@@ -54,7 +46,20 @@ async def _make_service(
 ) -> tuple[SessionService, SQLiteRepository, ManualClock]:
     repository = SQLiteRepository(tmp_path / f"{name}.sqlite3")
     await repository.initialize()
-    await repository.seed_texts(SEED_PATH)
+    seed_path = tmp_path / f"{name}-readings.json"
+    seed_path.write_text(
+        json.dumps(
+            [
+                {
+                    "language": "en",
+                    "level": "beginner",
+                    "body": "A catalog passage used only by service tests.",
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+    await repository.seed_texts(seed_path)
     clock = ManualClock()
     service = SessionService(
         repository,

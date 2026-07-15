@@ -17,10 +17,7 @@ from .views import QueueView, ReadingView, TextPickerView
 
 
 LOGGER = logging.getLogger(__name__)
-CATALOG_SEED_RESOURCES = (
-    "data/readings.json",
-    "data/google_doc_readings.json",
-)
+CATALOG_SEED_RESOURCES = ("data/google_doc_readings.json",)
 CATALOG_RETIREMENT_RESOURCES = ("data/retired_readings.json",)
 
 

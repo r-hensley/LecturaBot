@@ -67,33 +67,42 @@ def test_google_doc_catalog_mapping_and_discord_render_limits() -> None:
             assert len(build_reading_content(reading)) <= 2_000
 
 
-def test_runtime_catalog_keeps_original_seed_separate() -> None:
-    original_path = Path("src/lecturabot/data/readings.json")
-    original_records = json.loads(original_path.read_text(encoding="utf-8"))
+def test_retired_catalog_entries_are_not_in_active_seed() -> None:
+    retirement_path = Path("src/lecturabot/data/retired_readings.json")
+    retired_records = json.loads(retirement_path.read_text(encoding="utf-8"))
     google_records = json.loads(DEFAULT_OUTPUT.read_text(encoding="utf-8"))
 
-    assert len(original_records) == 12
+    assert len(retired_records) == 13
     assert not {
-        " ".join(str(item["body"]).split()).casefold() for item in original_records
+        " ".join(str(item["body"]).split()).casefold() for item in retired_records
     } & {" ".join(str(item["body"]).split()).casefold() for item in google_records}
 
 
-async def test_runtime_seeds_both_packaged_catalogs(tmp_path: Path) -> None:
-    assert CATALOG_SEED_RESOURCES == (
-        "data/readings.json",
-        "data/google_doc_readings.json",
-    )
+async def test_runtime_seeds_catalog_and_disables_legacy_entries(
+    tmp_path: Path,
+) -> None:
+    assert CATALOG_SEED_RESOURCES == ("data/google_doc_readings.json",)
     assert CATALOG_RETIREMENT_RESOURCES == ("data/retired_readings.json",)
     assert len(SQLiteRepository._read_seed_records(DEFAULT_OUTPUT)) == 1_014
-    assert len(
-        SQLiteRepository._read_seed_records(
-            Path("src/lecturabot/data/retired_readings.json")
-        )
-    ) == 1
+    retirement_path = Path("src/lecturabot/data/retired_readings.json")
+    assert len(SQLiteRepository._read_seed_records(retirement_path)) == 13
 
     repository = SQLiteRepository(tmp_path / "catalog.sqlite3")
     await repository.initialize()
     seed_paths = [Path("src/lecturabot") / name for name in CATALOG_SEED_RESOURCES]
 
-    assert sum([await repository.seed_texts(path) for path in seed_paths]) == 1_026
+    # Simulate entries retained by a database created before their retirement.
+    assert await repository.seed_texts(retirement_path) == 13
+    assert sum([await repository.seed_texts(path) for path in seed_paths]) == 1_014
     assert sum([await repository.seed_texts(path) for path in seed_paths]) == 0
+    assert await repository.disable_texts(retirement_path) == 13
+    assert await repository.disable_texts(retirement_path) == 0
+
+    active_count = sum(
+        [
+            len(await repository.list_texts(language=language, level=level))
+            for language in Language
+            for level in Level
+        ]
+    )
+    assert active_count == 1_014
