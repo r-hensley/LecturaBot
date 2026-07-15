@@ -29,7 +29,7 @@ The implementation follows the observed behavior in [EXPECTED_OPERATION.md](EXPE
 - Current-reader-only pass and a separate, fixed three-vote AFK skip action
 - Per-guild/user completed-turn totals and average reading time, reset after six
   hours without a normally completed reading
-- Numbered queue panels in upcoming-turn order, republished after departures and turn changes
+- Numbered queue panels in upcoming-turn order, republished on request and for new reader turns
 - SQLite-backed catalog, statistics, and versioned active-session snapshots
 - Startup reconciliation of voice membership and persisted Discord controls
 - Restart-safe, per-reader catalog no-repeat history for each room session
@@ -39,7 +39,7 @@ The implementation follows the observed behavior in [EXPECTED_OPERATION.md](EXPE
 ## POC decisions where the source behavior is unresolved
 
 - The server guide confirms a **Start Reading** action, but it was absent from the captured queue component dump. This POC appends a provisional `Comenzar Lectura / Start Reading` button with `custom_id="start_reading"` while leaving all observed controls unchanged.
-- `/lecturatest` publishes a fresh public queue panel in the channel and maintains one active queue panel per channel pair. Queue departures and turn changes publish a fresh numbered panel so the current order and updated statistics remain visible; superseded panels are retired. The planned final command names remain `/queue` and `/cola` after the original bot is retired.
+- `/lecturatest` publishes a fresh public queue panel in the channel and maintains one active queue panel per channel pair. Starting or advancing to a reader publishes a fresh numbered panel so the current order and updated statistics remain visible; routine queue and voice departures update the active panel in place without resurfacing it. Superseded panels are retired. The planned final command names remain `/queue` and `/cola` after the original bot is retired.
 - A session pauses when fewer than two queued voice participants remain. It must be started again after the second participant returns.
 - Reading time runs from publication of the reading text until a normal
   current-reader pass. That completion starts or extends only that user's

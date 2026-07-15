@@ -130,11 +130,12 @@ Observed behavior includes:
   queued participant other than the current reader may vote. Three unique
   votes are required, duplicate votes do not count, and the threshold is never
   reduced because fewer eligible voters are present.
-- **Queue departures:** Every voluntary queue departure or automatic removal
-  after leaving the paired voice channel publishes a fresh queue panel. If the
-  departing participant is the current reader, the turn advances to the next
-  reader when the minimum-participant rule permits; otherwise the session
-  pauses in its documented waiting state.
+- **Queue departures:** A voluntary queue departure or automatic removal after
+  leaving the paired voice channel updates the active queue panel in place. It
+  publishes a fresh panel only if the departing participant is the current
+  reader and the minimum-participant rule permits advancement to the next
+  reader; otherwise the session remains on its current turn or pauses in its
+  documented waiting state without resurfacing the queue.
 - **Turn transitions:** Starting the rotation, a normal current-reader pass,
   and a successful AFK skip all publish a fresh queue panel for the new turn.
   The superseded panel must no longer accept state-changing interactions.
@@ -538,8 +539,8 @@ The reimplementation is presently expected to need:
   separate bilingual AFK-skip action requiring three unique queued,
   non-current votes.
 - Automatic removal when a queued user leaves voice.
-- Current-reader mentions and fresh queue panels after departures and turn
-  changes.
+- Current-reader mentions and fresh queue panels when requested or when a new
+  reader's turn begins.
 - Numbered active queues in upcoming-turn order, with the current reader at
   position `1` and the next reader at position `2`.
 - A Spanish-English text catalog with difficulty selection.
@@ -624,8 +625,9 @@ The most useful future examples would show:
 
 ### Batch 6: Live POC testing feedback
 
-- Required a fresh queue panel after every queue departure and every turn
-  transition, including automatic advancement when the current reader leaves.
+- Required a fresh queue panel for every new reader turn, including automatic
+  advancement when the current reader leaves; later feedback changed ordinary
+  departures to silent in-place updates.
 - Required active queues to be numbered in upcoming-turn order, with the
   current reader as `1`, while retaining completed-turn and average-time data
   on every row.

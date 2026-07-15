@@ -198,17 +198,18 @@ Discord message is not expected to update itself at the exact expiry instant.
 
 The clone publishes a fresh queue message when:
 
+- a participant explicitly invokes `/lecturatest`;
 - the reading rotation starts;
 - the current reader passes normally;
 - three unique AFK votes force a skip; or
-- any queued participant leaves voluntarily or is removed after leaving the
-  paired voice channel.
+- the current reader leaves and the session advances to another reader.
 
-If the current reader leaves, the same publication follows advancement to the
-next reader when the session can continue, or reflects the paused state when it
-cannot. After the new panel is successfully published and registered as the
-active queue message, the superseded panel's view is retired so its controls
-cannot mutate live state.
+Other voluntary queue departures and automatic removals after leaving the
+paired voice channel update the active panel in place without resurfacing it.
+If a current-reader departure pauses the session instead of activating another
+reader, that update also stays in place. After a new panel is successfully
+published and registered as the active queue message, the superseded panel's
+view is retired so its controls cannot mutate live state.
 
 This numbered layout and publication lifecycle are **clone enhancements** from
 live testing. They do not change the unnumbered original-bot evidence template
@@ -799,8 +800,8 @@ original bot:
 - [ ] Render `turns: 0` and `avg reading time: n/a` on the next queue refresh
       after that user goes six hours without a normal completed reading; do not
       extend the window for queue activity, AFK skips, or another user's turn.
-- [ ] Publish a fresh queue panel after every queue departure and turn change,
-      then retire the superseded panel's controls.
+- [ ] Publish a fresh queue panel on explicit request and for every new reader
+      turn; update other departures in place, and retire superseded controls.
 - [ ] Allow only the current reader to pass; require three unique queued,
       non-current votes through the separate AFK control to force a skip.
 - [ ] Validate message and embed lengths before sending catalog or custom text.

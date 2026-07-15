@@ -233,6 +233,34 @@ def _reading_state() -> SessionState:
 
 
 @pytest.mark.asyncio
+async def test_refresh_queue_edits_active_panel_without_resurfacing_it() -> None:
+    events: list[str] = []
+    old_message = _FakeMessage(111, "old", events)
+    channel = _FakeChannel(
+        new_message=_FakeMessage(222, "new", events),
+        old_message=old_message,
+        events=events,
+    )
+    service = _FakeService(events)
+    controller = _controller(service)
+
+    async def text_channel(_channel_id: int) -> _FakeChannel:
+        return channel
+
+    controller._text_channel = text_channel  # type: ignore[method-assign]
+
+    result = await controller._refresh_queue(_state())
+
+    assert result is old_message
+    assert channel.fetch_calls == [111]
+    assert channel.send_calls == []
+    assert service.set_queue_calls == []
+    assert events == ["fetch:111", "old.edit"]
+    assert len(old_message.edit_calls) == 1
+    assert isinstance(old_message.edit_calls[0]["view"], QueueView)
+
+
+@pytest.mark.asyncio
 async def test_repost_queue_persists_new_panel_before_retiring_old_panel() -> None:
     events: list[str] = []
     old_message = _FakeMessage(111, "old", events)

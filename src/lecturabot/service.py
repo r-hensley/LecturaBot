@@ -392,7 +392,11 @@ class SessionService:
                     else None
                 ),
                 advanced=advanced,
-                repost_queue=True,
+                # Keep ordinary queue and voice departures quiet by editing
+                # the active panel in place. Only bring the queue back to the
+                # bottom of the channel when this departure starts the next
+                # reader's turn.
+                repost_queue=advanced,
             )
 
     async def start(self, *, text_channel_id: int, actor_id: int) -> Transition:

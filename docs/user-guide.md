@@ -34,9 +34,10 @@ Lectura 2 while connected to the Lectura 2 voice channel.
 
 You must remain in that voice channel while queued. If you leave or move to a
 different voice channel, the bot automatically removes you from the queue. You
-lose your position and must join again at the end. The bot publishes a fresh
-queue panel after any queue departure. If the current reader leaves, the bot
-passes to the next reader when the session can continue.
+lose your position and must join again at the end. The bot updates the active
+queue panel in place without posting it again. If the current reader leaves,
+the bot passes to the next reader when the session can continue and publishes
+a fresh panel for that new turn.
 
 ### Queue controls
 
@@ -238,9 +239,10 @@ texto de Lectura 2 mientras estás conectado al canal de voz Lectura 2.
 
 Debes permanecer en ese canal de voz mientras estés en la cola. Si sales o te
 mueves a otro canal de voz, el bot te quitará automáticamente de la cola.
-Perderás tu puesto y tendrás que unirte de nuevo al final. El bot publicará un
-panel nuevo después de cualquier salida de la cola. Si sale el lector actual,
-el bot pasará al siguiente lector cuando la sesión pueda continuar.
+Perderás tu puesto y tendrás que unirte de nuevo al final. El bot actualizará
+el panel activo sin volver a publicarlo. Si sale el lector actual, el bot
+pasará al siguiente lector cuando la sesión pueda continuar y publicará un
+panel nuevo para ese turno.
 
 ### Controles de la cola
 
