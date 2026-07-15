@@ -51,6 +51,35 @@ def test_exact_annotation_match_returns_source_spelling_and_case() -> None:
     )
 
 
+def test_markdown_formatted_letters_are_ignored_when_matching_source() -> None:
+    body = (
+        "Esperó creyendo en su mirada; murió decapitado. Lo acusó de ser "
+        "despiadado con los indígenas, los conquistadores y las ciudades doradas."
+    )
+    raw_value = (
+        "esper__ó__ (tilde), creyendo, mira__d__a (d), murió, "
+        "decapita__d__o (**d**), acus__ó__ (tilde), "
+        "despiada__d__o (d), ind__í__genas (tilde), "
+        "conquista__d__ores (d), ciuda__d__es dora__d__as (d)"
+    )
+
+    assert [
+        find_correction_target(body, item, language="es")
+        for item in split_correction_items(raw_value)
+    ] == [
+        "Esperó",
+        "creyendo",
+        "mirada",
+        "murió",
+        "decapitado",
+        "acusó",
+        "despiadado",
+        "indígenas",
+        "conquistadores",
+        "ciudades doradas",
+    ]
+
+
 def test_parenthesized_explanatory_sentence_is_not_guessed_from_first_word() -> None:
     assert (
         find_correction_target(

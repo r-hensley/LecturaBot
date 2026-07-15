@@ -235,6 +235,35 @@ def test_annotations_and_custom_emojis_are_preserved_while_targets_highlight() -
     )
 
 
+def test_correction_markdown_renders_but_mentions_remain_escaped() -> None:
+    reading = ActiveReading(
+        reader_id=10,
+        reader_display_name="Reader",
+        language=Language.SPANISH,
+        level=Level.BEGINNER,
+        body="Esperó con una mirada.",
+        started_at=100,
+    )
+    reading.add_corrections(
+        corrector_id=20,
+        corrector_display_name="Listener",
+        items=[
+            "esper__ó__ (tilde)",
+            "mira__d__a (**d**) @everyone <@123456789012345678>",
+        ],
+        match_texts=["Esperó", "mirada"],
+        source=CorrectionSource.BUTTON,
+    )
+
+    embed = build_corrections_embed(reading)
+    assert embed.description == (
+        "<@20> suggests:\n"
+        "**esper__ó__ (tilde)**\n"
+        "**mira__d__a (**d**) @\u200beveryone "
+        "<@\u200b123456789012345678>**"
+    )
+
+
 def _button_contract(view: discord.ui.View) -> list[tuple[str, str, int, int]]:
     return [
         (str(item.label), str(item.custom_id), int(item.style), int(item.row or 0))

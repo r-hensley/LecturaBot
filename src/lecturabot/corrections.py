@@ -13,6 +13,7 @@ _CUSTOM_EMOJI_MARKUP = re.compile(
     r"|(?<!\w):[A-Za-z0-9_]+:(?:[0-9]+)?(?!\w)"
 )
 _WORD_TOKEN = re.compile(r"[^\W_]+(?:[\u2019'][^\W_]+)*", re.UNICODE)
+_INLINE_MARKDOWN_MARKER = re.compile(r"[_\\~|*`]")
 
 _MIN_FUZZY_SIMILARITY = 0.82
 _MIN_FUZZY_MARGIN = 0.06
@@ -142,7 +143,13 @@ def find_correction_target(
 
 
 def correction_candidates(correction: str, *, language: str) -> list[str]:
-    """Return exact and annotation-free forms without interpreting emojis."""
+    """Return exact and annotation-free forms without interpreting emojis.
+
+    Discord markdown is presentation metadata rather than part of the source
+    word.  Strip it before matching so a correction such as ``mira__d__a``
+    targets ``mirada`` while the submitted spelling remains available for the
+    correction summary.
+    """
 
     # Retained in the public API because callers already know the room language;
     # matching itself is deliberately language-independent.
@@ -150,6 +157,7 @@ def correction_candidates(correction: str, *, language: str) -> list[str]:
 
     normalized = " ".join(correction.split())
     emoji_free = _remove_custom_emoji_markup(normalized)
+    emoji_free = " ".join(_INLINE_MARKDOWN_MARKER.sub("", emoji_free).split())
     if not normalized or not _WORD_TOKEN.search(emoji_free):
         return []
 
