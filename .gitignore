@@ -14,3 +14,7 @@ config.toml
 *.sqlite3-wal
 
 .idea
+
+# Retained locally as historical reference, not maintained project documentation.
+EXPECTED_OPERATION.md
+EXPECTED_EMBED_METADATA.md
