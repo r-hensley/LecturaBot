@@ -16,7 +16,7 @@ The implementation follows the observed behavior in [EXPECTED_OPERATION.md](EXPE
 - One independent session per configured voice/text channel pair
 - Voice-channel validation and automatic removal after leaving voice
 - Persistent, stale-safe queue, picker, and reading controls
-- Explicit two-participant start gate
+- Single-participant sessions, with the same rotation flow used for groups
 - Beginner, Intermediate, and Advanced catalog choices backed by 1,026 bundled English and Spanish passages
 - Custom-text modal, including a language label in the Other Languages channel
 - Correction modal and reply-to-reading correction capture, with newline or
@@ -40,7 +40,7 @@ The implementation follows the observed behavior in [EXPECTED_OPERATION.md](EXPE
 
 - The server guide confirms a **Start Reading** action, but it was absent from the captured queue component dump. This POC appends a provisional `Comenzar Lectura / Start Reading` button with `custom_id="start_reading"` while leaving all observed controls unchanged.
 - `/lecturatest` publishes a fresh public queue panel in the channel and maintains one active queue panel per channel pair. Starting or advancing to a reader publishes a fresh numbered panel so the current order and updated statistics remain visible; routine queue and voice departures update the active panel in place without resurfacing it. Superseded panels are retired. The planned final command names remain `/queue` and `/cola` after the original bot is retired.
-- A session pauses when fewer than two queued voice participants remain. It must be started again after the second participant returns.
+- A session can start and continue with one queued voice participant. It ends only when the queue becomes empty.
 - Reading time runs from publication of the reading text until a normal
   current-reader pass. That completion starts or extends only that user's
   six-hour statistics window. After six hours without another normal

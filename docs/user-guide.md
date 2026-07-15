@@ -17,8 +17,8 @@ corrections, and reading-time statistics.
 3. Type `/lecturatest` in that text channel.
 4. Use the new queue panel that appears in the channel and click
    **Unirse / Enter**.
-5. Wait for at least two people to join the queue, then click
-   **Comenzar Lectura / Start Reading**.
+5. Click **Comenzar Lectura / Start Reading**. You can begin by yourself or
+   wait for more readers to join.
 6. When the bot mentions you, choose a language and level or submit your own
    text.
 7. Read the displayed passage aloud. Other people in the voice channel can
@@ -46,7 +46,7 @@ a fresh panel for that new turn.
 | **Unirse / Enter** | Adds you to the end of the reader queue. |
 | **Salir / Leave** | Removes you from the queue. |
 | **Instrucciones / Instructions** | Shows a short private reminder of the workflow. |
-| **Comenzar Lectura / Start Reading** | Starts the rotation when at least two queued participants are ready. |
+| **Comenzar Lectura / Start Reading** | Starts the rotation with one or more queued participants. |
 
 `/lecturatest` publishes a fresh public queue panel in the channel. Running it
 again replaces the previous panel instead of creating a separate session. This
@@ -55,10 +55,9 @@ still active.
 
 Each room's queue can contain up to 25 people.
 
-A room session continues while at least one person remains in its queue. It
-survives a bot restart and may pause when fewer than two people remain. When the
-queue becomes completely empty, that session ends; the next person to enter
-starts a new room session.
+A room session continues while at least one person remains in its queue and
+survives a bot restart. When the queue becomes completely empty, that session
+ends; the next person to enter starts a new room session.
 
 ### Choose what to read
 
@@ -162,9 +161,8 @@ verify native-language roles.
 After any normal pass, successful AFK skip, or current-reader departure, the
 bot publishes a fresh queue panel for the new turn.
 
-If the queue falls below two people but is not empty, the session pauses. Once
-enough people return, a queued participant must press **Start Reading** again.
-If the queue becomes empty, the session ends instead.
+The session continues when only one reader remains; that reader receives each
+new turn. If the queue becomes empty, the session ends.
 
 ### Queue statistics
 
@@ -222,8 +220,8 @@ behavior or reading-text problems.
 3. Escribe `/lecturatest` en ese canal de texto.
 4. Usa el panel nuevo de la cola que aparece en el canal y pulsa
    **Unirse / Enter**.
-5. Espera hasta que haya al menos dos personas en la cola y pulsa
-   **Comenzar Lectura / Start Reading**.
+5. Pulsa **Comenzar Lectura / Start Reading**. Puedes comenzar a solas o
+   esperar a que se unan más lectores.
 6. Cuando el bot te mencione, elige un idioma y nivel o proporciona tu propio
    texto.
 7. Lee el texto en voz alta. Las otras personas del canal de voz pueden enviar
@@ -251,7 +249,7 @@ panel nuevo para ese turno.
 | **Unirse / Enter** | Te añade al final de la cola de lectores. |
 | **Salir / Leave** | Te quita de la cola. |
 | **Instrucciones / Instructions** | Muestra en privado un recordatorio breve del proceso. |
-| **Comenzar Lectura / Start Reading** | Comienza la rotación cuando haya al menos dos participantes preparados. |
+| **Comenzar Lectura / Start Reading** | Comienza la rotación con una o más personas en la cola. |
 
 `/lecturatest` publica un panel nuevo y público de la cola en el canal. Volver a
 ejecutarlo reemplaza el panel anterior; no crea una sesión separada. Este
@@ -260,10 +258,10 @@ original siga activo.
 
 La cola de cada sala puede contener hasta 25 personas.
 
-La sesión de una sala continúa mientras quede al menos una persona en la cola.
-Sobrevive a un reinicio del bot y puede pausarse cuando quedan menos de dos
-personas. Cuando la cola queda completamente vacía, la sesión termina; la
-próxima persona que entre iniciará una sesión nueva en esa sala.
+La sesión de una sala continúa mientras quede al menos una persona en la cola y
+sobrevive a un reinicio del bot. Cuando la cola queda completamente vacía, la
+sesión termina; la próxima persona que entre iniciará una sesión nueva en esa
+sala.
 
 ### Elige qué leer
 
@@ -370,9 +368,8 @@ Después de un turno pasado normalmente, un voto AFK completado o la salida del
 lector actual, el bot publicará un panel nuevo de la cola para el siguiente
 turno.
 
-Si quedan menos de dos personas en la cola, pero no está vacía, la sesión se
-pausa. Cuando vuelva a haber suficientes personas, alguien de la cola deberá
-pulsar **Start Reading** otra vez. Si la cola queda vacía, la sesión termina.
+La sesión continúa cuando queda un solo lector; esa persona recibe cada turno
+nuevo. Si la cola queda vacía, la sesión termina.
 
 ### Estadísticas de la cola
 

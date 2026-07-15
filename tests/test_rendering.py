@@ -16,6 +16,7 @@ from lecturabot.rendering import (
     PICKER_DESCRIPTION,
     QUEUE_TITLE,
     build_corrections_embed,
+    build_instructions_embed,
     build_picker_embed,
     build_queue_embed,
     build_reading_content,
@@ -28,6 +29,14 @@ from lecturabot.views import (
     ReadingView,
     TextPickerView,
 )
+
+
+def test_instructions_allow_a_single_participant_to_start() -> None:
+    description = build_instructions_embed().description
+
+    assert description is not None
+    assert "puedes empezar solo" in description
+    assert "you can start by yourself" in description
 
 
 def test_active_and_empty_queue_embeds_match_metadata_contract() -> None:

@@ -87,7 +87,7 @@ class SessionService:
         self,
         repository: SQLiteRepository,
         *,
-        minimum_participants: int = 2,
+        minimum_participants: int = 1,
         maximum_participants: int = 25,
         skip_vote_threshold: int = 3,
         maximum_correction_entries: int = 20,
@@ -95,8 +95,8 @@ class SessionService:
         clock: Callable[[], int] | None = None,
         chooser: Callable[[Sequence[ReadingText]], ReadingText] | None = None,
     ) -> None:
-        if minimum_participants < 2:
-            raise ValueError("minimum_participants must be at least 2")
+        if minimum_participants < 1:
+            raise ValueError("minimum_participants must be at least 1")
         if maximum_participants < minimum_participants:
             raise ValueError(
                 "maximum_participants cannot be below minimum_participants"

@@ -223,9 +223,9 @@ def build_instructions_embed() -> discord.Embed:
         description=(
             "1. Únete al canal de voz correspondiente y entra en la cola. / "
             "Join the matching voice channel and enter the queue.\n"
-            "2. Se necesitan al menos dos personas; después pulsa "
-            "**Comenzar Lectura / Start Reading**. / At least two people are "
-            "required; then press **Start Reading**.\n"
+            "2. Cuando estés listo, pulsa **Comenzar Lectura / Start "
+            "Reading**; puedes empezar solo. / When ready, press **Start "
+            "Reading**; you can start by yourself.\n"
             "3. Cuando sea tu turno, elige un texto o proporciona el tuyo. / "
             "When it is your turn, choose a text or provide your own.\n"
             "4. Los demás pueden enviar correcciones mientras escuchan. / "

@@ -153,21 +153,16 @@ async def _prepare_custom_reading(
 
 
 @pytest.mark.asyncio
-async def test_start_gate_rotation_stats_and_restart_round_trip(
+async def test_single_participant_rotation_stats_and_restart_round_trip(
     tmp_path: Path,
 ) -> None:
     service, repository, clock = await _make_service(tmp_path)
     await _join(service, 10)
 
-    with pytest.raises(SessionError) as insufficient:
-        await service.start(text_channel_id=101, actor_id=10)
-    _assert_error(insufficient, "not_enough_participants")
-
-    await _join(service, 20)
     started = await service.start(text_channel_id=101, actor_id=10)
     assert started.state.phase is SessionPhase.SELECTING
     assert started.state.current_user_id == 10
-    assert started.state.queue == [10, 20]
+    assert started.state.queue == [10]
     assert started.state.turn_started_at == 1_000
     assert started.repost_queue is True
 
@@ -205,8 +200,8 @@ async def test_start_gate_rotation_stats_and_restart_round_trip(
     assert passed.advanced is True
     assert passed.repost_queue is True
     assert passed.retired_reading_message_id == 600
-    assert passed.state.queue == [10, 20]
-    assert passed.state.current_user_id == 20
+    assert passed.state.queue == [10]
+    assert passed.state.current_user_id == 10
     assert passed.state.phase is SessionPhase.SELECTING
     assert passed.state.members[10].turns == 1
     assert passed.state.members[10].total_seconds == 125
@@ -219,7 +214,7 @@ async def test_start_gate_rotation_stats_and_restart_round_trip(
     await restarted.initialize()
     recovered = await restarted.get_session(101)
     assert recovered is not None
-    assert recovered.current_user_id == 20
+    assert recovered.current_user_id == 10
     assert recovered.members[10].turns == 1
     assert recovered.members[10].total_seconds == 125
 
@@ -574,13 +569,14 @@ async def test_leaving_current_advances_and_rejoining_uses_queue_tail(
         reader_id=20,
         message_id=501,
     )
-    below_minimum = await service.leave(text_channel_id=101, user_id=20)
-    assert below_minimum.advanced is False
-    assert below_minimum.repost_queue is False
-    assert below_minimum.state.queue == [10]
-    assert below_minimum.state.phase is SessionPhase.WAITING
-    assert below_minimum.state.current_user_id is None
-    assert below_minimum.retired_picker_message_id == 501
+    final_remaining = await service.leave(text_channel_id=101, user_id=20)
+    assert final_remaining.advanced is True
+    assert final_remaining.repost_queue is True
+    assert final_remaining.state.queue == [10]
+    assert final_remaining.state.phase is SessionPhase.SELECTING
+    assert final_remaining.state.current_user_id == 10
+    assert final_remaining.activated_reader_id == 10
+    assert final_remaining.retired_picker_message_id == 501
 
 
 @pytest.mark.asyncio

@@ -49,8 +49,8 @@ The supplied instructions ask people to correct only readers who are reading in 
 2. The user opens that voice channel's corresponding text channel. The voice and text channel numbers must match.
 3. The user types `/queue` in English or `/cola` in Spanish to interact with the bot.
 4. The user enters the queue through **Unirse / Enter** and remains in the associated voice channel.
-5. At least two people must be present before a reading session can start. The guide recommends mentioning the self-assignable `@Sesión de Lectura` role to find another participant.
-6. When the minimum is met and participants are ready, they use **Start Reading** / **Comenzar Lectura**.
+5. One queued participant may start a reading session. The guide still recommends mentioning the self-assignable `@Sesión de Lectura` role when someone wants listening partners.
+6. When the queued participant or group is ready, they use **Start Reading** / **Comenzar Lectura**.
 7. A queued user waits for their turn and may submit corrections for the current reader.
 8. When the user's turn begins, the bot mentions them and presents text-selection options.
 9. The reader chooses a stored text level, supplies their own text, or reads from another source. Bot-assisted use in **Other Languages** requires the custom-text choice.
@@ -79,7 +79,7 @@ after the original bot is retired.
 
 - The bot interaction is invoked with `/queue` or its Spanish equivalent `/cola` in the text channel corresponding to the user's reading voice channel.
 - The server provides six numbered English-Spanish reading voice channels, each paired with one numbered text channel.
-- At least two people are required before reading can start.
+- The clone permits one queued participant to start reading; the source guide's two-person requirement is intentionally overridden.
 - Participants use **Start Reading** / **Comenzar Lectura** once they are ready.
 - Users can enter the queue with a button.
 - Users can leave the queue.
@@ -149,8 +149,7 @@ Observed behavior includes:
   independent six-hour inactivity window for those statistics; it is separate
   from the room-session lifetime described below.
 - **Room-session lifetime:** A room session remains active while at least one
-  participant remains queued, including while it is paused below the
-  two-participant minimum. Its state survives a bot restart. A temporary
+  participant remains queued. Its state survives a bot restart. A temporary
   leave/rejoin does not erase that user's session-scoped catalog history unless
   the departure makes the queue empty. An empty queue ends and resets the room
   session.
@@ -170,7 +169,7 @@ Observed behavior includes:
 - How the original bot closed or expired an abandoned or empty session. The
   clone ends its room session as soon as the queue becomes empty.
 - Whether all six channel pairs can run sessions simultaneously. The channel layout implies that their state must at least be isolated from one another.
-- What happens if **Start Reading** is pressed with fewer than two eligible participants.
+- How the original bot handled **Start Reading** with fewer than two eligible participants. The clone allows one.
 - Whether every participant must press **Start Reading**, only one participant starts the session, or the control means something turn-specific.
 - The original bot's exact vote threshold and whether it changed with queue
   size. The clone uses a fixed threshold of three unique votes.
@@ -465,7 +464,7 @@ The user must invoke and use the bot in the text channel paired with their curre
 ### Community notification role and language policy
 
 - `@Sesión de Lectura` is an optional, self-assignable role available through Discord's **Channels & Roles** interface.
-- Participants are encouraged to mention this role and ask for a native speaker before starting, because at least two people are required.
+- Participants may mention this role to find a native speaker or additional readers, but a solo session is allowed.
 - Only English and Spanish speech and messages are allowed in the six standard reading-channel pairs.
 - The language restriction and role assignment appear to be server policy and Discord configuration, not necessarily behavior that this bot must enforce or manage.
 
@@ -534,7 +533,7 @@ The reimplementation is presently expected to need:
 - `/queue` and `/cola` slash-command entry points.
 - Configurable, isolated voice/text channel pairs, including the six documented standard pairs and the separate other-language pair.
 - A queue tied to matching voice-channel presence.
-- A two-participant minimum and **Start Reading** action.
+- A one-participant minimum and **Start Reading** action.
 - Enter and leave actions, a red current-reader-only pass action, and a
   separate bilingual AFK-skip action requiring three unique queued,
   non-current votes.
