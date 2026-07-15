@@ -52,8 +52,8 @@ def build_queue_embed(
         return discord.Embed(title=QUEUE_TITLE, description="\n".join(lines))
 
     # Queue positions are turn-relative: 1 is the current reader, 2 is next,
-    # and so on. The durable queue itself remains in join order, so rotating
-    # this display does not change fairness or the state machine.
+    # and so on. The durable queue itself remains in circular rotation order,
+    # so rotating this display does not change fairness or the state machine.
     display_queue = state.queue
     if state.current_index is not None:
         display_queue = (

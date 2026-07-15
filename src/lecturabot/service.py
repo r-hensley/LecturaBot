@@ -309,7 +309,15 @@ class SessionService:
                 user_id,
                 at_timestamp=self._clock(),
             )
-            state.queue.append(user_id)
+            if state.current_index is None:
+                state.queue.append(user_id)
+            else:
+                # The queue is circular while a turn is active. Insert just
+                # before the current reader in the stored list so the new
+                # participant is last in the upcoming rotation, then preserve
+                # the current reader's shifted index.
+                state.queue.insert(state.current_index, user_id)
+                state.current_index += 1
             state.members[user_id] = MemberState(
                 user_id=user_id,
                 display_name=display_name,
@@ -922,7 +930,7 @@ class SessionService:
             state.used_text_ids.discard(reading.source_text_id)
 
     def _advance(self, state: SessionState) -> None:
-        # Keep durable join order stable and move only the current marker.
+        # Keep the durable circular rotation stable and move the current marker.
         # Rendering rotates this list so the active reader appears as #1.
         current_index = state.current_index or 0
         if len(state.queue) < self.minimum_participants:

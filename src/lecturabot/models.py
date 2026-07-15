@@ -290,9 +290,9 @@ class ActiveReading:
 class SessionState:
     """Authoritative state for one configured text/voice channel pair.
 
-    Stored queue order stays stable while ``current_index`` moves through it.
-    Renderers may rotate that order to show turn-relative positions without
-    mutating fairness or the durable join order.
+    Stored queue order represents a durable circular rotation while
+    ``current_index`` identifies the active reader. Renderers may rotate that
+    order to show turn-relative positions without mutating fairness.
     """
 
     session_id: int

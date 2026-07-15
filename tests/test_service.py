@@ -14,6 +14,7 @@ from lecturabot.models import (
     Level,
     ReadingText,
     SessionPhase,
+    SessionState,
 )
 from lecturabot.repository import STATISTICS_INACTIVITY_SECONDS, SQLiteRepository
 from lecturabot.service import (
@@ -87,6 +88,15 @@ async def _join(
             user_id=user_id,
             display_name=f"Reader {user_id}",
         )
+
+
+def _upcoming_rotation(state: SessionState) -> list[int]:
+    if state.current_index is None:
+        return list(state.queue)
+    return (
+        state.queue[state.current_index:]
+        + state.queue[:state.current_index]
+    )
 
 
 def _assert_error(error: pytest.ExceptionInfo[SessionError], code: str) -> None:
@@ -221,6 +231,42 @@ async def test_start_gate_rotation_stats_and_restart_round_trip(
     assert expired.members[10].turns == 0
     assert expired.members[10].total_seconds == 0
     assert expired.members[10].average_seconds is None
+
+
+@pytest.mark.asyncio
+async def test_zero_turn_joiner_enters_at_end_of_active_rotation(
+    tmp_path: Path,
+) -> None:
+    service, repository, clock = await _make_service(tmp_path)
+    for user_id in (10, 20, 30):
+        await repository.record_completed_turn(
+            guild_id=1,
+            user_id=user_id,
+            duration_seconds=60,
+            completed_at=clock.value,
+        )
+    await _join(service, 10, 20, 30)
+    await service.start(text_channel_id=101, actor_id=10)
+    await service.set_picker_message(
+        text_channel_id=101,
+        reader_id=10,
+        message_id=500,
+    )
+    await service.pass_turn(
+        text_channel_id=101,
+        actor_id=10,
+        source_message_id=500,
+    )
+
+    joined = await service.join(
+        text_channel_id=101,
+        user_id=40,
+        display_name="Reader 40",
+    )
+
+    assert joined.state.members[40].turns == 0
+    assert joined.state.current_user_id == 20
+    assert _upcoming_rotation(joined.state) == [20, 30, 10, 40]
 
 
 @pytest.mark.asyncio
@@ -520,8 +566,8 @@ async def test_leaving_current_advances_and_rejoining_uses_queue_tail(
     removed_waiter = await service.leave(text_channel_id=101, user_id=30)
     assert removed_waiter.advanced is False
     assert removed_waiter.repost_queue is True
-    assert removed_waiter.state.queue == [20, 10]
     assert removed_waiter.state.current_user_id == 20
+    assert _upcoming_rotation(removed_waiter.state) == [20, 10]
 
     await service.set_picker_message(
         text_channel_id=101,
