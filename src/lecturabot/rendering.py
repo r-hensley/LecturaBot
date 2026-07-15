@@ -175,8 +175,13 @@ def build_reading_content(reading: ActiveReading) -> str:
     """Render one safe reading post and enforce Discord's content limit."""
     lines = [f"## {_reading_heading(reading)}"]
     if reading.expected_emotion:
+        emotion_label = (
+            "Emoción esperada"
+            if reading.language is Language.SPANISH
+            else "Expected Emotion"
+        )
         lines.append(
-            f"Expected Emotion: {_escape_user_text(reading.expected_emotion)}"
+            f"{emotion_label}: {_escape_user_text(reading.expected_emotion)}"
         )
     lines.extend(
         [

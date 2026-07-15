@@ -175,6 +175,25 @@ def test_picker_and_reading_render_exact_text_and_highlights() -> None:
     assert corrections.colour is None
 
 
+def test_spanish_reading_localizes_expected_emotion_label() -> None:
+    reading = ActiveReading(
+        reader_id=10,
+        reader_display_name="Inés",
+        language=Language.SPANISH,
+        level=Level.INTERMEDIATE,
+        body="Pudo recorrer el barrio sin problemas.",
+        started_at=100,
+        expected_emotion="Alivio",
+    )
+
+    assert build_reading_content(reading) == (
+        "## Inés - Lectura - Español - Nivel Intermedio\n"
+        "Emoción esperada: Alivio\n"
+        "Pudo recorrer el barrio sin problemas.\n"
+        "** **"
+    )
+
+
 def test_duplicate_correction_uses_strikethrough_without_bold() -> None:
     reading = ActiveReading(
         reader_id=10,
