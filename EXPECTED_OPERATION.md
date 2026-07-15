@@ -241,7 +241,7 @@ The linked **Texts for Sesión de Lectura** document is an external bilingual re
 | Spanish | Fácil, Intermedio, Difícil, Super Difícil, SFW Halloween |
 
 Several Batch 1 bot readings also occur in the document. The clone vendors a
-plain-text snapshot and generates 1,015 validated catalog records from it. The
+plain-text snapshot and generates 1,014 validated catalog records from it. The
 running bot uses only the generated local JSON and never depends on Google Docs
 availability.
 
@@ -254,7 +254,8 @@ availability.
 | SFW Halloween | Advanced / Avanzado |
 
 The original 12 POC passages remain a separate seed, giving the packaged catalog
-1,027 total passages. Startup inserts both seed files idempotently into SQLite.
+1,026 total passages. Startup inserts both seed files idempotently into SQLite,
+then disables catalog retirements so removals also apply to existing databases.
 
 ### Clone requirements from live POC testing
 
@@ -610,7 +611,7 @@ The most useful future examples would show:
 
 - Confirmed that it is an external English-Spanish reading library with Easy,
   Medium, Hard, Super Hard, and SFW Halloween sections. A later full audit
-  extracted 1,015 unique passages into a validated local catalog snapshot so
+  extracted 1,014 unique passages into a validated local catalog snapshot so
   runtime operation does not depend on Google Docs.
 
 ### Batch 5: Bot embed and component export

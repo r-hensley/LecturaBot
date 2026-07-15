@@ -21,6 +21,7 @@ CATALOG_SEED_RESOURCES = (
     "data/readings.json",
     "data/google_doc_readings.json",
 )
+CATALOG_RETIREMENT_RESOURCES = ("data/retired_readings.json",)
 
 
 class LecturaCog(commands.Cog):
@@ -86,7 +87,18 @@ class LecturaBot(commands.Bot):
             # represented by a normal filesystem path.
             with resources.as_file(seed_resource) as seed_path:
                 inserted += await self.repository.seed_texts(seed_path)
-        LOGGER.info("reading catalog ready; inserted %s seed texts", inserted)
+        disabled = 0
+        for resource_name in CATALOG_RETIREMENT_RESOURCES:
+            retirement_resource = resources.files("lecturabot").joinpath(
+                resource_name
+            )
+            with resources.as_file(retirement_resource) as retirement_path:
+                disabled += await self.repository.disable_texts(retirement_path)
+        LOGGER.info(
+            "reading catalog ready; inserted %s seed texts; disabled %s retired texts",
+            inserted,
+            disabled,
+        )
         await self.service.initialize()
 
         await self.add_cog(LecturaCog(self.controller))

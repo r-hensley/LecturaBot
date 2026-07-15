@@ -51,6 +51,13 @@ EXPECTED_SOURCE_COUNTS: Final = {
     ("SPANISH", "HALLOWEEN"): 15,
 }
 
+# Source passages intentionally omitted from the runtime catalog. Pair each
+# source line with its opening text so source drift fails loudly instead of
+# silently excluding a different passage.
+CATALOG_EXCLUSIONS: Final = {
+    1447: "Say manoeuvre, yacht and vomit,",
+}
+
 # These six source passages have one missing fence delimiter.  The line
 # numbers make each deliberate repair visible and make unexpected source drift
 # fail loudly instead of silently changing passage boundaries.
@@ -240,9 +247,21 @@ def build_catalog(source_text: str) -> list[dict[str, object]]:
             f"found {dict(counts)}"
         )
 
+    readings_by_line = {reading.source_line: reading for reading in readings}
+    for source_line, expected_opening in CATALOG_EXCLUSIONS.items():
+        excluded_reading = readings_by_line.get(source_line)
+        if excluded_reading is None or not excluded_reading.body.startswith(
+            expected_opening
+        ):
+            raise CatalogBuildError(
+                f"catalog exclusion at source line {source_line} no longer matches"
+            )
+
     bodies: set[str] = set()
     records: list[dict[str, object]] = []
     for reading in readings:
+        if reading.source_line in CATALOG_EXCLUSIONS:
+            continue
         comparison_body = " ".join(reading.body.split()).casefold()
         if comparison_body in bodies:
             raise CatalogBuildError(

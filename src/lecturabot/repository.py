@@ -508,6 +508,12 @@ class SQLiteRepository:
         async with self._write_lock:
             return self._seed_texts_sync(records)
 
+    async def disable_texts(self, retirement_path: Path) -> int:
+        """Disable matching catalog records and return the changed row count."""
+        records = self._read_seed_records(retirement_path)
+        async with self._write_lock:
+            return self._disable_texts_sync(records)
+
     @staticmethod
     def _read_seed_records(
         seed_path: Path,
@@ -550,6 +556,26 @@ class SQLiteRepository:
                 ) VALUES (?, ?, ?, ?)
                 """,
                 records,
+            )
+            connection.commit()
+            return connection.total_changes - before
+        finally:
+            connection.close()
+
+    def _disable_texts_sync(
+        self,
+        records: list[tuple[str, str, str, str | None]],
+    ) -> int:
+        connection = self._connect()
+        try:
+            before = connection.total_changes
+            connection.executemany(
+                """
+                UPDATE reading_texts
+                SET enabled = 0
+                WHERE language = ? AND level = ? AND body = ? AND enabled = 1
+                """,
+                ((language, level, body) for language, level, body, _ in records),
             )
             connection.commit()
             return connection.total_changes - before

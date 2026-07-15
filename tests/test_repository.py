@@ -163,6 +163,29 @@ async def test_seed_is_idempotent_and_catalog_filters_language_and_level(
         level=Level.INTERMEDIATE,
     ) == []
 
+    retirement_path = tmp_path / "retired_readings.json"
+    retirement_path.write_text(
+        json.dumps(
+            [
+                {
+                    "language": "en",
+                    "level": "beginner",
+                    "body": "First English text.",
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+    assert await repository.disable_texts(retirement_path) == 1
+    assert await repository.disable_texts(retirement_path) == 0
+    assert [
+        text.body
+        for text in await repository.list_texts(
+            language=Language.ENGLISH,
+            level=Level.BEGINNER,
+        )
+    ] == ["Second English text."]
+
 
 async def test_session_round_trip_and_load_all(tmp_path: Path) -> None:
     repository = await _repository(tmp_path)

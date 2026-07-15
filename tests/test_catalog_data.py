@@ -5,11 +5,12 @@ import json
 from pathlib import Path
 import warnings
 
-from lecturabot.bot import CATALOG_SEED_RESOURCES
+from lecturabot.bot import CATALOG_RETIREMENT_RESOURCES, CATALOG_SEED_RESOURCES
 from lecturabot.models import ActiveReading, Language, Level
 from lecturabot.rendering import build_reading_content
 from lecturabot.repository import SQLiteRepository
 from scripts.build_google_doc_catalog import (
+    CATALOG_EXCLUSIONS,
     DEFAULT_OUTPUT,
     DEFAULT_SOURCE,
     EXPECTED_SOURCE_COUNTS,
@@ -22,7 +23,9 @@ from scripts.build_google_doc_catalog import (
 def test_google_doc_catalog_matches_vendored_source_snapshot() -> None:
     records = build_catalog(DEFAULT_SOURCE.read_text(encoding="utf-8-sig"))
 
-    assert len(records) == sum(EXPECTED_SOURCE_COUNTS.values()) == 1_015
+    assert len(records) == sum(EXPECTED_SOURCE_COUNTS.values()) - len(
+        CATALOG_EXCLUSIONS
+    ) == 1_014
     assert DEFAULT_OUTPUT.read_text(encoding="utf-8") == render_catalog(records)
 
 
@@ -43,6 +46,7 @@ def test_google_doc_catalog_mapping_and_discord_render_limits() -> None:
         (item["language"], item["level"], item["source_category"])
         for item in records
     )
+    expected_counts[("en", "advanced", "super_hard")] -= len(CATALOG_EXCLUSIONS)
 
     assert actual_counts == expected_counts
     assert len({" ".join(str(item["body"]).split()).casefold() for item in records}) == len(
@@ -79,11 +83,17 @@ async def test_runtime_seeds_both_packaged_catalogs(tmp_path: Path) -> None:
         "data/readings.json",
         "data/google_doc_readings.json",
     )
-    assert len(SQLiteRepository._read_seed_records(DEFAULT_OUTPUT)) == 1_015
+    assert CATALOG_RETIREMENT_RESOURCES == ("data/retired_readings.json",)
+    assert len(SQLiteRepository._read_seed_records(DEFAULT_OUTPUT)) == 1_014
+    assert len(
+        SQLiteRepository._read_seed_records(
+            Path("src/lecturabot/data/retired_readings.json")
+        )
+    ) == 1
 
     repository = SQLiteRepository(tmp_path / "catalog.sqlite3")
     await repository.initialize()
     seed_paths = [Path("src/lecturabot") / name for name in CATALOG_SEED_RESOURCES]
 
-    assert sum([await repository.seed_texts(path) for path in seed_paths]) == 1_027
+    assert sum([await repository.seed_texts(path) for path in seed_paths]) == 1_026
     assert sum([await repository.seed_texts(path) for path in seed_paths]) == 0
