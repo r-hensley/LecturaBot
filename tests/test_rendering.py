@@ -227,6 +227,39 @@ def test_duplicate_correction_uses_strikethrough_without_bold() -> None:
     assert "**~~new york~~**" not in embed.description
 
 
+def test_duplicate_correction_does_not_strike_parenthetical_comment() -> None:
+    reading = ActiveReading(
+        reader_id=10,
+        reader_display_name="Reader",
+        language=Language.ENGLISH,
+        level=Level.BEGINNER,
+        body="Houston",
+        started_at=100,
+    )
+    reading.add_corrections(
+        corrector_id=20,
+        corrector_display_name="First",
+        items=["Houston"],
+        match_texts=["Houston"],
+        source=CorrectionSource.BUTTON,
+    )
+    reading.add_corrections(
+        corrector_id=30,
+        corrector_display_name="Second",
+        items=["Houston (not Ustin)"],
+        match_texts=["Houston"],
+        source=CorrectionSource.REPLY,
+    )
+
+    embed = build_corrections_embed(reading)
+    assert embed.description == (
+        "<@20> suggests:\n"
+        "**Houston**\n\n"
+        "<@30> suggests:\n"
+        "~~Houston~~ (not Ustin)"
+    )
+
+
 def test_annotations_and_custom_emojis_are_preserved_while_targets_highlight() -> None:
     reading = ActiveReading(
         reader_id=10,
@@ -257,9 +290,34 @@ def test_annotations_and_custom_emojis_are_preserved_while_targets_highlight() -
     assert embed.title == "Correcciones / Corrections : 3"
     assert embed.description == (
         "<@20> suggests:\n"
-        "**produce (noun)**\n"
-        "**(apple <:peepo_Pray:922638020035883058>)**\n"
-        "**(venga venga, tú puedes! :whatCat:)**"
+        "**produce** (noun)\n"
+        "(apple <:peepo_Pray:922638020035883058>)\n"
+        "(venga venga, tú puedes! :whatCat:)"
+    )
+
+
+def test_trailing_parenthetical_correction_annotation_is_not_bold() -> None:
+    reading = ActiveReading(
+        reader_id=10,
+        reader_display_name="Reader",
+        language=Language.SPANISH,
+        level=Level.BEGINNER,
+        body="Biblioteca Sábado",
+        started_at=100,
+    )
+    reading.add_corrections(
+        corrector_id=20,
+        corrector_display_name="Listener",
+        items=["Biblioteca (estrés)", "Sábado (acento)"],
+        match_texts=["Biblioteca", "Sábado"],
+        source=CorrectionSource.BUTTON,
+    )
+
+    embed = build_corrections_embed(reading)
+    assert embed.description == (
+        "<@20> suggests:\n"
+        "**Biblioteca** (estrés)\n"
+        "**Sábado** (acento)"
     )
 
 
@@ -286,7 +344,7 @@ def test_correction_markdown_renders_but_mentions_remain_escaped() -> None:
     embed = build_corrections_embed(reading)
     assert embed.description == (
         "<@20> suggests:\n"
-        "**esper__ó__ (tilde)**\n"
+        "**esper__ó__** (tilde)\n"
         "**mira__d__a (**d**) @\u200beveryone "
         "<@\u200b123456789012345678>**"
     )

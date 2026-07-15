@@ -116,6 +116,34 @@ def _escape_correction_text(value: str) -> str:
     return discord.utils.escape_mentions(value)
 
 
+def _format_correction_text(value: str, *, discarded: bool = False) -> str:
+    """Style the correction while leaving a trailing annotation unchanged."""
+    marker = "~~" if discarded else "**"
+    parenthesis_depth = 0
+    annotation_start: int | None = None
+    for index, character in enumerate(value):
+        if character == "(":
+            if parenthesis_depth == 0:
+                annotation_start = index
+            parenthesis_depth += 1
+        elif character == ")" and parenthesis_depth:
+            parenthesis_depth -= 1
+            if parenthesis_depth == 0 and value[index + 1 :].strip():
+                annotation_start = None
+
+    if annotation_start is None or parenthesis_depth:
+        return f"{marker}{_escape_correction_text(value)}{marker}"
+
+    correction = value[:annotation_start].rstrip()
+    annotation = value[len(correction) :]
+    if not correction:
+        return _escape_correction_text(value)
+    return (
+        f"{marker}{_escape_correction_text(correction)}{marker}"
+        f"{_escape_correction_text(annotation)}"
+    )
+
+
 def highlight_body(body: str, corrections: list[str]) -> str:
     """Highlight literal corrections longest-first without nesting markup.
 
@@ -202,11 +230,7 @@ def build_corrections_embed(reading: ActiveReading) -> discord.Embed:
     blocks: list[str] = []
     for group in reading.correction_groups:
         items = "\n".join(
-            (
-                f"~~{_escape_correction_text(entry.text)}~~"
-                if entry.discarded
-                else f"**{_escape_correction_text(entry.text)}**"
-            )
+            _format_correction_text(entry.text, discarded=entry.discarded)
             for entry in group.entries
         )
         blocks.append(f"<@{group.user_id}> suggests:\n{items}")

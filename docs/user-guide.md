@@ -134,10 +134,12 @@ commas, a whole sentence, or a custom emoji. For example,
 `stress` when it finds that word in the reading. The emoji is ordinary
 annotation text, not an abbreviation or alias for another word. A trailing
 label works similarly: `produce (noun)` remains visible as submitted while
-`produce` can be highlighted. If another corrector later submits a word or
-phrase that has already been suggested, the later duplicate remains attributed
-to that corrector but appears as `~~struck through~~` to show that it was
-discarded.
+`produce` can be highlighted. In the correction list, the corrected word is
+bold while its trailing parenthetical annotation remains regular. If another
+corrector later submits a word or phrase that has already been suggested, the
+later duplicate remains attributed to that corrector with the duplicated word
+`~~struck through~~` to show that it was discarded. Any trailing parenthetical
+annotation remains regular rather than being struck through.
 
 Please submit corrections only when the reader is practicing your native
 language. This is a community rule even though the bot does not currently
