@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "lecturabot"
 version = "0.1.0"
-description = "A bilingual Discord reading-session assistant proof of concept"
+description = "A bilingual Discord reading-session assistant"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [

@@ -14,7 +14,7 @@ corrections, and reading-time statistics.
 
 1. Join a **Lectura voice channel**.
 2. Open the text channel with the same room number.
-3. Type `/lecturatest` in that text channel.
+3. Type `/queue` in that text channel.
 4. Use the new queue panel that appears in the channel and click
    **Unirse / Enter**.
 5. Click **Comenzar Lectura / Start Reading**. You can begin by yourself or
@@ -50,10 +50,9 @@ a fresh panel for that new turn.
 | **Instrucciones / Instructions** | Shows a short private reminder of the workflow. |
 | **Comenzar Lectura / Start Reading** | Starts the rotation with one or more queued participants. |
 
-`/lecturatest` publishes a fresh public queue panel in the channel. Running it
-again replaces the previous panel instead of creating a separate session. This
-temporary command avoids a name conflict while the original reading bot is
-still active.
+`/queue` publishes a fresh public queue panel in the channel. Running it again
+replaces the previous panel instead of creating a separate session. `/cola`
+opens the same queue for Spanish-speaking users.
 
 Each room's queue can contain up to 25 people.
 
@@ -223,7 +222,7 @@ itself at the expiry time.
 | Message or symptom | What to do |
 | --- | --- |
 | Join the matching voice channel first | Move to the voice channel paired with the current text channel. |
-| This queue panel is no longer active | Run `/lecturatest` again and use the new queue panel. |
+| This queue panel is no longer active | Run `/queue` again and use the new queue panel. |
 | That picker, reading, or turn is no longer active | Use the newest message for the current reader. |
 | You are already in the queue | Continue waiting; do not press Enter again. |
 | You already voted | Your skip vote was recorded and cannot be submitted twice. |
@@ -243,7 +242,7 @@ behavior or reading-text problems.
 
 1. Únete a un **canal de voz de Lectura**.
 2. Abre el canal de texto que tenga el mismo número.
-3. Escribe `/lecturatest` en ese canal de texto.
+3. Escribe `/cola` en ese canal de texto.
 4. Usa el panel nuevo de la cola que aparece en el canal y pulsa
    **Unirse / Enter**.
 5. Pulsa **Comenzar Lectura / Start Reading**. Puedes comenzar a solas o
@@ -278,10 +277,9 @@ panel nuevo para ese turno.
 | **Instrucciones / Instructions** | Muestra en privado un recordatorio breve del proceso. |
 | **Comenzar Lectura / Start Reading** | Comienza la rotación con una o más personas en la cola. |
 
-`/lecturatest` publica un panel nuevo y público de la cola en el canal. Volver a
-ejecutarlo reemplaza el panel anterior; no crea una sesión separada. Este
-comando temporal evita un conflicto de nombres mientras el bot de lectura
-original siga activo.
+`/cola` publica un panel nuevo y público de la cola en el canal. Volver a
+ejecutarlo reemplaza el panel anterior; no crea una sesión separada. `/queue`
+abre la misma cola para los usuarios de habla inglesa.
 
 La cola de cada sala puede contener hasta 25 personas.
 
@@ -448,7 +446,7 @@ la ventana.
 | Mensaje o problema | Solución |
 | --- | --- |
 | Únete primero al canal de voz correspondiente | Entra al canal de voz asociado con el canal de texto actual. |
-| Este panel de cola ya no está activo | Ejecuta `/lecturatest` otra vez y usa el panel nuevo. |
+| Este panel de cola ya no está activo | Ejecuta `/cola` otra vez y usa el panel nuevo. |
 | Ese selector, texto o turno ya no está activo | Usa el mensaje más reciente del lector actual. |
 | Ya estás en la cola | Sigue esperando; no vuelvas a pulsar Unirse. |
 | Ya votaste | Tu voto fue registrado y no puedes enviarlo dos veces. |

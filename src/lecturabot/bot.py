@@ -22,17 +22,25 @@ CATALOG_RETIREMENT_RESOURCES = ("data/retired_readings.json",)
 
 
 class LecturaCog(commands.Cog):
-    """Expose the temporary test command and gateway-driven correction events."""
+    """Expose the queue commands and gateway-driven correction events."""
 
     def __init__(self, controller: LecturaController) -> None:
         self.controller = controller
 
     @app_commands.command(
-        name="lecturatest",
-        description="Open the temporary LecturaBot test queue.",
+        name="queue",
+        description="Open the LecturaBot reading queue.",
     )
     @app_commands.guild_only()
-    async def lecturatest(self, interaction: discord.Interaction) -> None:
+    async def queue(self, interaction: discord.Interaction) -> None:
+        await self.controller.show_queue(interaction)
+
+    @app_commands.command(
+        name="cola",
+        description="Abre la cola de lectura de LecturaBot.",
+    )
+    @app_commands.guild_only()
+    async def cola(self, interaction: discord.Interaction) -> None:
         await self.controller.show_queue(interaction)
 
     @commands.Cog.listener()

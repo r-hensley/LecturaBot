@@ -1,4 +1,3 @@
-"""LecturaBot proof-of-concept package."""
+"""LecturaBot package."""
 
 __version__ = "0.1.0"
-

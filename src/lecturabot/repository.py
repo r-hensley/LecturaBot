@@ -1,10 +1,10 @@
 """SQLite persistence for the reading catalog, statistics, and sessions.
 
 The repository keeps an asynchronous public API so the Discord-facing service
-does not depend on a particular database driver. For this proof of concept,
-each operation is a deliberately small, local ``sqlite3`` transaction. Writes
-are serialized with an asyncio lock. A production deployment with heavier
-traffic should replace this adapter with a supported asynchronous driver.
+does not depend on a particular database driver. Each operation is a
+deliberately small, local ``sqlite3`` transaction, and writes are serialized
+with an asyncio lock. A deployment with substantially heavier traffic should
+use a supported asynchronous driver.
 """
 
 from __future__ import annotations
@@ -28,11 +28,11 @@ class RepositoryError(RuntimeError):
 
 
 class SQLiteRepository:
-    """Persist POC state in short, serialized SQLite transactions.
+    """Persist bot state in short, serialized SQLite transactions.
 
-    Active sessions use versioned JSON snapshots so this POC can recover its
-    state without prematurely freezing a production schema. Catalog texts and
-    user statistics remain normal queryable tables.
+    Active sessions use versioned JSON snapshots for restart recovery and
+    format evolution. Catalog texts and user statistics remain normal
+    queryable tables.
     """
 
     def __init__(self, database_path: Path) -> None:

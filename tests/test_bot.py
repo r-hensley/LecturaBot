@@ -7,14 +7,14 @@ import pytest
 from lecturabot.bot import LecturaCog
 
 
-def test_only_temporary_slash_command_is_registered() -> None:
-    """Avoid collisions with the original bot during coexistence testing."""
+def test_bilingual_queue_commands_are_registered() -> None:
     cog = LecturaCog(object())  # type: ignore[arg-type]
 
     commands = cog.get_app_commands()
 
-    assert [command.name for command in commands] == ["lecturatest"]
-    assert commands[0].description == "Open the temporary LecturaBot test queue."
+    assert [command.name for command in commands] == ["queue", "cola"]
+    assert commands[0].description == "Open the LecturaBot reading queue."
+    assert commands[1].description == "Abre la cola de lectura de LecturaBot."
 
 
 @pytest.mark.asyncio
@@ -28,6 +28,7 @@ async def test_development_scope_can_clear_old_global_aliases() -> None:
 
     assert bot.tree.get_commands() == []
     assert [command.name for command in bot.tree.get_commands(guild=guild)] == [
-        "lecturatest"
+        "queue",
+        "cola",
     ]
     await bot.close()

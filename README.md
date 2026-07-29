@@ -1,209 +1,181 @@
-# LecturaBot proof of concept
+# LecturaBot
 
-LecturaBot is a professional proof of concept for a bilingual Discord reading-session assistant. It manages isolated voice/text channel queues, reader turns, a bundled offline English-Spanish text catalog, user-supplied texts, pronunciation corrections, AFK skip votes, and reading-time statistics.
+> **Original authors:** pip (Discord user ID `126922582208282624`) and
+> yovax (Discord user ID `438520750362853376`).
+
+LecturaBot is a bilingual Discord bot for managing group reading sessions in
+English, Spanish, and other languages. It coordinates reader queues, presents
+practice texts, collects pronunciation corrections, handles skipped turns, and
+tracks reading statistics across multiple voice/text channel pairs.
+
+## Features
+
+- Independent reading sessions for multiple configured channel pairs
+- Bilingual queue and reading controls
+- Voice-channel validation and automatic queue cleanup
+- Beginner, Intermediate, and Advanced text selection
+- Offline catalog of 1,014 English and Spanish passages
+- Custom texts for English, Spanish, and other languages
+- Pronunciation corrections submitted through a modal or message reply
+- Exact and conservative fuzzy highlighting of corrected words
+- Grouped correction attribution and duplicate detection
+- Automatic continuation messages when a correction summary becomes full
+- Current-reader pass controls and three-vote AFK skipping
+- Per-user completed-turn counts and average reading time
+- Persistent sessions, statistics, controls, and catalog history in SQLite
+- Restart recovery and reconciliation with current Discord voice membership
 
 ## Documentation
 
-- [User guide / Guía de usuario](docs/user-guide.md) — instructions for people participating in reading sessions
+- [User guide / Guía de usuario](docs/user-guide.md) — instructions for
+  participating in reading sessions
+- [Privacy policy](PRIVACY.md) — what data LecturaBot stores and how to request
+  its deletion
 
-## What is implemented
+## Requirements
 
-- Temporary `/lecturatest` application command while the original bot remains active
-- One independent session per configured voice/text channel pair
-- Voice-channel validation and automatic removal after leaving voice
-- Persistent, stale-safe queue, picker, and reading controls
-- Single-participant sessions, with the same rotation flow used for groups
-- Beginner, Intermediate, and Advanced catalog choices backed by 1,014 bundled English and Spanish passages
-- Custom-text modal, including a language label in the Other Languages channel
-- Correction modal and reply-to-reading correction capture, with newline or
-  top-level-comma separated entries
-- Exact-first, conservative fuzzy typo matching for case-insensitive,
-  all-occurrence highlights that preserve the source casing
-- Free-form correction annotations, including parenthesized sentences and
-  custom emojis, remain listed even when no source highlight is found
-- Grouped correction attribution, with later cross-corrector duplicates struck through
-- Current-reader-only pass, same-level catalog-text replacement, and a separate,
-  fixed three-vote AFK skip action
-- Per-guild/user completed-turn totals and average reading time, reset after six
-  hours without a normally completed reading
-- Numbered queue panels in upcoming-turn order, republished on request and for new reader turns
-- SQLite-backed catalog, statistics, and versioned active-session snapshots
-- Startup reconciliation of voice membership and persisted Discord controls
-- Restart-safe, per-reader catalog no-repeat history for each room session
-- Per-room serialization across state changes and Discord message publication
-- Strict TOML configuration with the Discord token accepted only from an environment variable
-
-## POC decisions where the source behavior is unresolved
-
-- The server guide confirms a **Start Reading** action, but it was absent from the captured queue component dump. This POC appends a provisional `Comenzar Lectura / Start Reading` button with `custom_id="start_reading"` while leaving all observed controls unchanged.
-- `/lecturatest` publishes a fresh public queue panel in the channel and maintains one active queue panel per channel pair. Starting or advancing to a reader publishes a fresh numbered panel so the current order and updated statistics remain visible; routine queue and voice departures update the active panel in place without resurfacing it. Superseded panels are retired. The planned final command names remain `/queue` and `/cola` after the original bot is retired.
-- A session can start and continue with one queued voice participant. It ends only when the queue becomes empty.
-- Reading time runs from publication of the reading text until a normal
-  current-reader pass. That completion starts or extends only that user's
-  six-hour statistics window. After six hours without another normal
-  completion, `turns` returns to `0` and the average returns to `n/a` on the
-  next queue refresh. Joining, leaving, selection-only passes, AFK skips, and
-  other users' turns do not extend the window.
-- **Pasar turno / Pass Turn** is available only to the current reader. A separate **Saltar turno ausente / Skip AFK Turn** action requires three unique votes from queued, non-current readers; the threshold is never reduced when fewer voters are available.
-- **Otro texto / Different Text** replaces a catalog passage with another
-  unseen passage from the same language and level without advancing or counting
-  the turn. It is not shown for user-supplied texts.
-- Correction counts de-duplicate the normalized match target when one exists,
-  otherwise the submitted text. Attribution groups retain each corrector's
-  entry, but a later duplicate from another corrector is rendered as
-  `~~struck through~~` to show that it was discarded.
-- Correction submissions split at newlines and commas outside parentheses.
-  Parentheses preserve one complete annotation even when it contains commas,
-  a sentence, or a custom emoji; for example, `(stress :peepoPray:)` remains
-  one displayed correction. Every parsed entry is listed whether or not it
-  appears in the reading. Matching only controls highlighting: the bot tries an
-  exact match first, then a conservative fuzzy match for likely typos, and
-  leaves uncertain or unmatched comments unhighlighted. Emojis remain ordinary
-  annotation text rather than aliases for words.
-- Native-language correction eligibility remains a community rule; the POC does not yet enforce language roles.
-- Correctors do not need to enter the reader queue, but they must be present in the matching voice channel.
-- Queue panels are capped at 25 participants. Correction submissions retain
-  their per-entry and per-submission safeguards, while a full Discord correction
-  embed is frozen and continued in a new canonical reading message. Archived
-  groups remain visible with their original highlights and still participate in
-  duplicate detection and totals.
-- Custom texts are turn-local and are not added to the reusable catalog.
-- Catalog no-repeat history is tracked independently for each reader during one
-  room session. It survives a bot restart and a temporary leave/rejoin while
-  the session remains active. An empty queue ends the session and resets that
-  history. Exhausting a language/level is strict: the bot directs that reader
-  to another level or a custom text instead of repeating a passage.
-
-## Prerequisites
-
-- The configured local Python environment:
-
-  ```bash
-  /mnt/c/Users/ryry0/Documents/Python/.venv/bin/python
-  ```
-
-- A Discord application and bot token
-- Bot scopes: `bot` and `applications.commands`
-- Channel permissions: View Channel, Send Messages, Embed Links, Read Message History, and Use Application Commands
-- Enable these gateway intents in the Discord developer portal:
+- Python 3.12 or newer
+- A Discord application with a bot token
+- The `bot` and `applications.commands` OAuth scopes
+- The following channel permissions:
+  - View Channel
+  - Send Messages
+  - Embed Links
+  - Read Message History
+  - Use Application Commands
+- The following gateway intents enabled in the Discord Developer Portal:
   - Server Members Intent
   - Message Content Intent
 
-Message Content Intent is required for reply-based corrections. The correction
-button and modal still work independently and can return private, ephemeral
-errors for submission limits or an invalid reading state.
+Message Content Intent is required for corrections submitted as replies.
+Corrections submitted through the button and modal do not depend on message
+content access.
+
+## Installation
+
+From an activated Python 3.12+ virtual environment, install the project in
+editable mode:
+
+```bash
+python -m pip install -e .
+```
 
 ## Configuration
 
-Copy the example and replace every placeholder Discord ID:
+Copy the example configuration:
 
 ```bash
 cp config.example.toml config.toml
 ```
 
-`config.toml` is ignored by Git. The token is deliberately not accepted from TOML:
+Replace the placeholder Discord IDs in each `[[channel_pairs]]` entry.
+Every text-channel ID and voice-channel ID must be unique.
+
+The two support contacts are configured separately:
+
+- `bot_status_contact_user_id` — shown for **Bot not working?**
+- `issue_contact_user_id` — shown for **Found a bug or text issue?**
+
+`config.toml` is ignored by Git. The Discord token is accepted only through the
+environment:
 
 ```bash
 export LECTURABOT_TOKEN='your-token-here'
 ```
 
-The text/voice channel pairs are read from `config.toml`. Admins can change the
-`[[channel_pairs]]` entries there, provided each text and voice channel ID is
-unique, then restart the bot to apply the change.
-
-Queue panels use `bot_status_contact_user_id` for **Bot not working?** and
-`issue_contact_user_id` for **Found a bug or text issue?**. Both contacts are
-configured independently in `config.toml`.
-
-For quick slash-command updates during development, set `dev_guild_id` in `config.toml`. Without it, commands are synced globally and may take longer to appear.
-
-## Reading catalog
-
-The bot does not contact Google Docs while running. At startup it idempotently
-seeds SQLite from the packaged catalog, then disables entries listed in the
-packaged retirement file:
-
-- `data/google_doc_readings.json`: 1,014 passages generated from the committed
-  snapshot of the community's **Texts for Sesión de Lectura** document
-- `data/retired_readings.json`: passages intentionally excluded from selection,
-  including the original 12 POC passages and copies already present in an
-  existing database
-
-The raw export is kept at `sources/google_doc_readings.txt`. Its original Easy,
-Medium, Hard, Super Hard, and SFW Halloween categories are retained as metadata.
-Because the Discord picker has three levels, Easy maps to Beginner, Medium maps
-to Intermediate, and Hard, Super Hard, and Halloween map to Advanced.
-
-To verify that the generated catalog still matches the snapshot:
-
-```bash
-/mnt/c/Users/ryry0/Documents/Python/.venv/bin/python \
-  scripts/build_google_doc_catalog.py --check
-```
-
-## Run
-
-Run directly from the checkout without modifying the shared virtual environment:
-
-```bash
-PYTHONPATH=src \
-  /mnt/c/Users/ryry0/Documents/Python/.venv/bin/python -m lecturabot
-```
-
-To use a configuration path other than `config.toml`:
+To load a configuration file from another location:
 
 ```bash
 export LECTURABOT_CONFIG=/absolute/path/to/config.toml
 ```
 
-## Test
+Set `dev_guild_id` in `config.toml` to synchronize application commands to one
+development server immediately. If it is omitted, commands are synchronized
+globally and may take longer to appear.
+
+## Running the bot
+
+Run from the repository checkout:
 
 ```bash
-PYTHONPATH=src \
-  /mnt/c/Users/ryry0/Documents/Python/.venv/bin/python -m pytest
+python -m lecturabot
 ```
 
-The test suite is offline: it exercises configuration, state transitions, persistence, rendering, highlighting, and component metadata without connecting to Discord.
+The bot initializes its SQLite database, loads the packaged reading catalog,
+restores active sessions, registers persistent Discord controls, and
+synchronizes its application commands during startup.
 
-## Source layout
+## Reading catalog
+
+LecturaBot uses a packaged catalog and does not contact Google Docs while
+running.
+
+- `src/lecturabot/data/google_doc_readings.json` contains 1,014 generated
+  English and Spanish passages.
+- `src/lecturabot/data/retired_readings.json` identifies passages that should
+  remain unavailable.
+- `sources/google_doc_readings.txt` is the committed plain-text source export.
+
+The source categories map to Discord's three reading levels as follows:
+
+| Source category | LecturaBot level |
+| --- | --- |
+| Easy | Beginner |
+| Medium | Intermediate |
+| Hard, Super Hard, and SFW Halloween | Advanced |
+
+Verify that the generated catalog matches its source:
+
+```bash
+python scripts/build_google_doc_catalog.py --check
+```
+
+## Testing
+
+Run the offline test suite:
+
+```bash
+python -m pytest
+```
+
+The tests cover configuration, session state transitions, persistence,
+rendering, correction matching, and Discord component metadata without
+connecting to Discord.
+
+## Project structure
 
 ```text
 src/lecturabot/
-  bot.py          Discord bot, slash commands, and gateway listeners
-  config.py       Strict TOML and environment configuration
-  controller.py   Discord interaction adapter and authorization
-  models.py       Session, reading, correction, and queue state
-  rendering.py    Exact embeds, reading content, and highlighting
-  repository.py   SQLite schema, catalog, snapshots, and statistics
-  service.py      Locked state machine and domain rules
-  views.py        Persistent views and input modals
+  bot.py          Discord bot, commands, and gateway listeners
+  config.py       TOML and environment configuration
+  controller.py   Discord interactions and authorization
+  models.py       Session, queue, reading, and correction state
+  rendering.py    Messages, embeds, and correction highlighting
+  repository.py   SQLite persistence and catalog access
+  service.py      Session state machine and domain rules
+  views.py        Persistent controls and input modals
 
-src/lecturabot/data/google_doc_readings.json
-  Generated 1,014-passage offline Google Doc catalog
+src/lecturabot/data/
+  google_doc_readings.json
+  retired_readings.json
 
-src/lecturabot/data/retired_readings.json
-  Catalog passages disabled on startup
+scripts/
+  build_google_doc_catalog.py
 
-sources/google_doc_readings.txt
-  Vendored plain-text Google Doc export
-
-scripts/build_google_doc_catalog.py
-  Validated source-to-catalog generator
+sources/
+  google_doc_readings.txt
 ```
 
-## Remaining TODO and decisions
+## Operational notes
 
-- **Add lightweight SQLite maintenance.** Keep SQLite for this bot's expected
-  scale, but establish a safe periodic backup procedure and add schema
-  migrations whenever the stored format changes.
-- **Continue UX polish from live testing.** Refine bilingual interaction copy,
-  modal labels, validation feedback, and component layout when concrete user
-  feedback identifies an improvement.
-- **Restore the final command names.** After the original bot is retired,
-  replace temporary `/lecturatest` with `/queue` and `/cola` and remove the
-  test command during the same deployment.
-
-The following are not planned requirements: native-language role enforcement,
-multi-process coordination, replacing SQLite with a server database, full
-audit/event history, or bot-managed notification-role subscriptions. These can
-be reconsidered only if future usage demonstrates a concrete need.
+- Active queue panels and reading controls are persisted across restarts.
+- Users who leave the associated voice channel are removed from the queue.
+- A room session ends when its queue becomes empty.
+- Custom texts apply only to the current turn and are not added to the catalog.
+- Catalog passages do not repeat for the same reader during an active room
+  session.
+- Correction submissions allow up to 20 entries of 100 characters each. When
+  the current correction summary fills, the bot freezes it and continues the
+  same turn in a new active reading message without losing earlier corrections.
+- SQLite is appropriate for the bot's current single-process deployment.
+  Back up the database before schema or persistence changes.

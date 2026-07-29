@@ -1,4 +1,4 @@
-"""Command-line entry point for the LecturaBot proof of concept."""
+"""Command-line entry point for LecturaBot."""
 
 from __future__ import annotations
 
