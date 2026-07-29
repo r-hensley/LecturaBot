@@ -13,6 +13,7 @@ from lecturabot.models import (
     SessionState,
 )
 from lecturabot.rendering import (
+    CorrectionSummaryOverflow,
     PICKER_DESCRIPTION,
     QUEUE_TITLE,
     build_corrections_embed,
@@ -225,6 +226,93 @@ def test_duplicate_correction_uses_strikethrough_without_bold() -> None:
         "~~new york~~"
     )
     assert "**~~new york~~**" not in embed.description
+
+
+def test_correction_embed_renders_only_current_groups_after_archive() -> None:
+    reading = ActiveReading(
+        reader_id=10,
+        reader_display_name="Reader",
+        language=Language.ENGLISH,
+        level=Level.BEGINNER,
+        body="Alpha beta gamma.",
+        started_at=100,
+    )
+    reading.add_corrections(
+        corrector_id=20,
+        corrector_display_name="First",
+        items=["Alpha", "gamma"],
+        source=CorrectionSource.BUTTON,
+    )
+    reading.archive_current_corrections()
+    reading.add_corrections(
+        corrector_id=30,
+        corrector_display_name="Second",
+        items=["alpha", "beta"],
+        source=CorrectionSource.REPLY,
+    )
+
+    embed = build_corrections_embed(reading)
+
+    assert embed.title == "Correcciones / Corrections : 3"
+    assert embed.description == (
+        "<@30> suggests:\n"
+        "~~alpha~~\n"
+        "**beta**"
+    )
+    assert "<@20>" not in embed.description
+    assert build_reading_content(reading) == (
+        "## Reader - Reading - English - Level Beginner\n"
+        "__**Alpha**__ __**beta**__ gamma.\n"
+        "** **"
+    )
+
+
+def test_highlight_markup_cannot_block_a_correction_that_fits_the_embed() -> None:
+    reading = ActiveReading(
+        reader_id=10,
+        reader_display_name="Reader",
+        language=Language.ENGLISH,
+        level=Level.BEGINNER,
+        body=("word " * 350).strip(),
+        started_at=100,
+    )
+    reading.add_corrections(
+        corrector_id=20,
+        corrector_display_name="Listener",
+        items=["word"],
+        source=CorrectionSource.BUTTON,
+    )
+
+    embed = build_corrections_embed(reading)
+    content = build_reading_content(reading)
+
+    assert len(embed.description or "") < 4_096
+    assert len(content) <= 2_000
+    assert "word word" in content
+    assert "__**word**__" not in content
+
+
+def test_correction_embed_uses_typed_overflow_for_rollover() -> None:
+    reading = ActiveReading(
+        reader_id=10,
+        reader_display_name="Reader",
+        language=Language.ENGLISH,
+        level=Level.BEGINNER,
+        body="A reading.",
+        started_at=100,
+    )
+    reading.add_corrections(
+        corrector_id=20,
+        corrector_display_name="Listener",
+        items=[
+            f"{index:02d}-{'x' * 95}"
+            for index in range(50)
+        ],
+        source=CorrectionSource.BUTTON,
+    )
+
+    with pytest.raises(CorrectionSummaryOverflow):
+        build_corrections_embed(reading)
 
 
 def test_duplicate_correction_does_not_strike_parenthetical_comment() -> None:

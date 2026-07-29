@@ -123,13 +123,22 @@ Only commas outside parentheses separate entries. For example,
 `produce (noun, uncountable)` remains part of that one entry. A trailing comma
 is allowed.
 
-Each correction can contain up to 100 characters. A reading can hold up to 20
-correction entries and 1,400 correction characters in total. These limits and
-the duplicate safeguards still apply, but a correction does not have to appear
-in the passage. Every parsed entry is saved and listed. Matching determines
-only whether the bot highlights part of the reading. After a button/modal
+Each correction can contain up to 100 characters, and one submission can
+contain up to 20 corrections. A correction does not have to appear in the
+passage: every parsed entry is saved and listed. Matching determines only
+whether the bot highlights part of the reading. After a button/modal
 submission, the private confirmation reports how many entries were listed
 without highlighting. A reply updates the visible correction list directly.
+
+When the current Discord correction embed becomes full, the bot freezes that
+reading message and posts a continuation containing the reading, the newest
+corrections, and the active controls. Earlier correction groups remain visible
+with their original highlights and continue to count for duplicate detection
+and the correction total. The newest reading message highlights its current
+correction groups. Always use or reply to that newest message after a
+continuation appears. If highlighting every match would make the reading
+message too long for Discord, the correction remains listed while the bot
+shows as many current-message highlights as fit.
 
 The bot groups corrections by corrector. When a submitted word or phrase
 matches the passage, the bot highlights every occurrence without changing the
@@ -219,7 +228,7 @@ itself at the expiry time.
 | You are already in the queue | Continue waiting; do not press Enter again. |
 | You already voted | Your skip vote was recorded and cannot be submitted twice. |
 | An AFK skip does not advance | Three different queued, non-current readers are required; the threshold is not reduced. |
-| The correction list is full | Give any remaining pronunciation feedback aloud in the voice channel. |
+| A correction continuation appears | Use the newest reading message for additional corrections and turn controls; earlier summaries are frozen history. |
 | A correction is listed but nothing is highlighted | The bot did not find a clear exact or fuzzy source match. The correction was still saved for the reader to review. |
 | No unused catalog text remains at this level | Choose another level or submit your own text; the bot will not repeat a passage for you in the same room session. |
 | Catalog choices fail in Other Languages | Use **Your own text** and provide the language name. |
@@ -343,14 +352,23 @@ Solo las comas que estén fuera de paréntesis separan entradas. Por ejemplo,
 que la coma de `produce (sustantivo, incontable)` sigue formando parte de una
 sola entrada. Se permite una coma final.
 
-Cada corrección puede tener hasta 100 caracteres. Una lectura puede contener
-un máximo total de 20 correcciones y 1.400 caracteres de corrección. Estos
-límites y las protecciones contra duplicados siguen vigentes, pero una
-corrección no tiene que aparecer en el texto. El bot guarda y muestra cada
-entrada analizada. La coincidencia solo determina si se destaca una parte de la
-lectura. Después de enviar mediante el botón o formulario, la confirmación
-privada indica cuántas entradas quedaron en la lista sin resaltarse. Una
-respuesta al mensaje actualiza directamente la lista visible de correcciones.
+Cada corrección puede tener hasta 100 caracteres y un envío puede contener
+hasta 20 correcciones. Una corrección no tiene que aparecer en el texto: el bot
+guarda y muestra cada entrada analizada. La coincidencia solo determina si se
+destaca una parte de la lectura. Después de enviar mediante el botón o
+formulario, la confirmación privada indica cuántas entradas quedaron en la
+lista sin resaltarse. Una respuesta al mensaje actualiza directamente la lista
+visible de correcciones.
+
+Cuando el resumen actual de Discord se llena, el bot congela ese mensaje y
+publica una continuación con la lectura, las correcciones más recientes y los
+controles activos. Los grupos anteriores permanecen visibles en sus mensajes
+originales con sus resaltados y siguen contando para la detección de duplicados
+y el total de correcciones. El mensaje más reciente resalta sus grupos actuales.
+Después de una continuación, usa o responde siempre a ese mensaje. El bot
+mantiene la corrección en la lista si resaltar todas las coincidencias haría
+que el mensaje fuera demasiado largo para Discord, y muestra tantos resaltados
+del mensaje actual como quepan.
 
 El bot agrupa las correcciones por corrector. Cuando una palabra o frase
 coincide con el texto, el bot destaca todas sus apariciones sin cambiar las
@@ -435,7 +453,7 @@ la ventana.
 | Ya estás en la cola | Sigue esperando; no vuelvas a pulsar Unirse. |
 | Ya votaste | Tu voto fue registrado y no puedes enviarlo dos veces. |
 | Un salto AFK no avanza | Se necesitan tres lectores distintos que estén en la cola y no sean el lector actual; el requisito no se reduce. |
-| La lista de correcciones está llena | Comparte en voz cualquier corrección adicional. |
+| Aparece una continuación de correcciones | Usa el mensaje de lectura más reciente para añadir correcciones y controlar el turno; los resúmenes anteriores quedan congelados. |
 | Una corrección aparece en la lista, pero no se destaca nada | El bot no encontró una coincidencia exacta o difusa suficientemente clara. La corrección se guardó igualmente para que el lector pueda revisarla. |
 | No queda ningún texto sin usar en ese nivel | Elige otro nivel o proporciona tu propio texto; el bot no repetirá un texto para ti durante la misma sesión de sala. |
 | Las opciones del catálogo fallan en Other Languages | Usa **Your own text** e indica el nombre del idioma. |

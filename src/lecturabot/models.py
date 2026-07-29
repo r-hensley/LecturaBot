@@ -9,7 +9,7 @@ from typing import Any
 from .corrections import correction_base_text
 
 
-SESSION_SNAPSHOT_VERSION = 1
+SESSION_SNAPSHOT_VERSION = 2
 
 
 class ChannelMode(StrEnum):
@@ -166,7 +166,21 @@ class ActiveReading:
     custom_language_label: str | None = None
     source_text_id: int | None = None
     message_id: int | None = None
-    correction_groups: list[CorrectionGroup] = field(default_factory=list)
+    archived_correction_groups: list[CorrectionGroup] = field(default_factory=list)
+    current_correction_groups: list[CorrectionGroup] = field(default_factory=list)
+
+    @property
+    def correction_groups(self) -> list[CorrectionGroup]:
+        """Return every correction group across frozen and active summaries.
+
+        This compatibility view keeps domain rules independent of where a
+        correction is displayed. Renderers that update Discord must use
+        ``current_correction_groups`` so frozen messages remain immutable.
+        """
+        return [
+            *self.archived_correction_groups,
+            *self.current_correction_groups,
+        ]
 
     @property
     def correction_count(self) -> int:
@@ -182,9 +196,20 @@ class ActiveReading:
 
     @property
     def correction_texts(self) -> list[str]:
+        """Return matched correction text across archived and current groups."""
         return [
             entry.match_text
             for group in self.correction_groups
+            for entry in group.entries
+            if entry.match_text
+        ]
+
+    @property
+    def current_correction_texts(self) -> list[str]:
+        """Return matched correction text belonging to the active summary."""
+        return [
+            entry.match_text
+            for group in self.current_correction_groups
             for entry in group.entries
             if entry.match_text
         ]
@@ -198,21 +223,22 @@ class ActiveReading:
         source: CorrectionSource,
         match_texts: list[str | None] | None = None,
     ) -> None:
-        if match_texts is None:
-            match_texts = items
-        if len(match_texts) != len(items):
+        resolved_match_texts: list[str | None] = (
+            list(items) if match_texts is None else match_texts
+        )
+        if len(resolved_match_texts) != len(items):
             raise ValueError("match_texts must align with correction items")
         group = next(
             (
                 existing
-                for existing in self.correction_groups
+                for existing in self.current_correction_groups
                 if existing.user_id == corrector_id
             ),
             None,
         )
         if group is None:
             group = CorrectionGroup(corrector_id, corrector_display_name)
-            self.correction_groups.append(group)
+            self.current_correction_groups.append(group)
         group.display_name = corrector_display_name
 
         # Groups are organized by corrector for display, not submission time.
@@ -225,7 +251,7 @@ class ActiveReading:
                 if normalized:
                     seen_suggestions.add(normalized)
 
-        for item, match_text in zip(items, match_texts, strict=True):
+        for item, match_text in zip(items, resolved_match_texts, strict=True):
             normalized = self._normalize_correction(
                 match_text or correction_base_text(item)
             )
@@ -240,6 +266,11 @@ class ActiveReading:
             )
             if normalized:
                 seen_suggestions.add(normalized)
+
+    def archive_current_corrections(self) -> None:
+        """Freeze the displayed groups and begin a fresh correction summary."""
+        self.archived_correction_groups.extend(self.current_correction_groups)
+        self.current_correction_groups = []
 
     @staticmethod
     def _normalize_correction(value: str) -> str:
@@ -258,13 +289,37 @@ class ActiveReading:
             "custom_language_label": self.custom_language_label,
             "source_text_id": self.source_text_id,
             "message_id": self.message_id,
-            "correction_groups": [
-                group.to_dict() for group in self.correction_groups
+            "archived_correction_groups": [
+                group.to_dict() for group in self.archived_correction_groups
+            ],
+            "current_correction_groups": [
+                group.to_dict() for group in self.current_correction_groups
             ],
         }
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> ActiveReading:
+        if (
+            "archived_correction_groups" in data
+            or "current_correction_groups" in data
+        ):
+            archived_correction_groups = [
+                CorrectionGroup.from_dict(group)
+                for group in data.get("archived_correction_groups", [])
+            ]
+            current_correction_groups = [
+                CorrectionGroup.from_dict(group)
+                for group in data.get("current_correction_groups", [])
+            ]
+        else:
+            # Snapshots written before correction-summary rollover kept every
+            # group in the one live embed. Preserve that message as the current
+            # summary so restart recovery can continue editing it in place.
+            archived_correction_groups = []
+            current_correction_groups = [
+                CorrectionGroup.from_dict(group)
+                for group in data.get("correction_groups", [])
+            ]
         return cls(
             reader_id=int(data["reader_id"]),
             reader_display_name=str(data["reader_display_name"]),
@@ -278,10 +333,8 @@ class ActiveReading:
             custom_language_label=data.get("custom_language_label"),
             source_text_id=data.get("source_text_id"),
             message_id=data.get("message_id"),
-            correction_groups=[
-                CorrectionGroup.from_dict(group)
-                for group in data.get("correction_groups", [])
-            ],
+            archived_correction_groups=archived_correction_groups,
+            current_correction_groups=current_correction_groups,
         )
 
 
@@ -382,7 +435,7 @@ class SessionState:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> SessionState:
         version = int(data.get("snapshot_version", 0))
-        if version != SESSION_SNAPSHOT_VERSION:
+        if version not in (1, SESSION_SNAPSHOT_VERSION):
             raise ValueError(f"unsupported session snapshot version: {version}")
         used_text_ids = {
             int(text_id) for text_id in data.get("used_text_ids", [])

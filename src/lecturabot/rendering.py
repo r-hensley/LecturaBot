@@ -26,6 +26,10 @@ class RenderError(ValueError):
     """Raised when rendered Discord content exceeds a platform limit."""
 
 
+class CorrectionSummaryOverflow(RenderError):
+    """Raised when the active correction embed needs a continuation message."""
+
+
 def format_average(seconds: int | None) -> str:
     if seconds is None:
         return "n/a"
@@ -185,8 +189,10 @@ def _reading_heading(reading: ActiveReading) -> str:
     return f"{reader} - Reading - English - Level {levels[reading.level]}"
 
 
-def build_reading_content(reading: ActiveReading) -> str:
-    """Render one safe reading post and enforce Discord's content limit."""
+def _compose_reading_content(
+    reading: ActiveReading,
+    matches: list[str],
+) -> str:
     lines = [f"## {_reading_heading(reading)}"]
     if reading.expected_emotion:
         emotion_label = (
@@ -199,12 +205,42 @@ def build_reading_content(reading: ActiveReading) -> str:
         )
     lines.extend(
         [
-            highlight_body(reading.body, reading.correction_texts),
+            highlight_body(reading.body, matches),
             "** **",
         ]
     )
-    content = "\n".join(lines)
-    if len(content) > MAX_MESSAGE_CONTENT:
+    return "\n".join(lines)
+
+
+def build_reading_content(reading: ActiveReading) -> str:
+    """Render a safe reading post without letting markup reject corrections."""
+    base_content = _compose_reading_content(reading, [])
+    if len(base_content) > MAX_MESSAGE_CONTENT:
+        raise RenderError(
+            f"reading content is {len(base_content)} characters; "
+            f"Discord allows {MAX_MESSAGE_CONTENT}"
+        )
+
+    current_matches = reading.current_correction_texts
+    content = _compose_reading_content(reading, current_matches)
+    if len(content) <= MAX_MESSAGE_CONTENT:
+        return content
+
+    # Highlight markup adds eight characters per occurrence and can exceed
+    # Discord's content limit even though the source passage itself fits.
+    # Keep every correction in its embed, and retain as many current-page
+    # highlights as can be rendered safely instead of imposing another cap.
+    included_matches: list[str] = []
+    content = base_content
+    for match in current_matches:
+        candidate = _compose_reading_content(
+            reading,
+            [*included_matches, match],
+        )
+        if len(candidate) <= MAX_MESSAGE_CONTENT:
+            included_matches.append(match)
+            content = candidate
+    if len(content) > MAX_MESSAGE_CONTENT:  # Defensive: base was checked above.
         raise RenderError(
             f"reading content is {len(content)} characters; "
             f"Discord allows {MAX_MESSAGE_CONTENT}"
@@ -214,7 +250,7 @@ def build_reading_content(reading: ActiveReading) -> str:
 
 def build_corrections_embed(reading: ActiveReading) -> discord.Embed:
     blocks: list[str] = []
-    for group in reading.correction_groups:
+    for group in reading.current_correction_groups:
         items = "\n".join(
             _format_correction_text(entry.text, discarded=entry.discarded)
             for entry in group.entries
@@ -222,7 +258,7 @@ def build_corrections_embed(reading: ActiveReading) -> discord.Embed:
         blocks.append(f"<@{group.user_id}> suggests:\n{items}")
     description = "\n\n".join(blocks) if blocks else NO_CORRECTIONS
     if len(description) > MAX_EMBED_DESCRIPTION:
-        raise RenderError(
+        raise CorrectionSummaryOverflow(
             f"correction summary is {len(description)} characters; "
             f"Discord allows {MAX_EMBED_DESCRIPTION}"
         )

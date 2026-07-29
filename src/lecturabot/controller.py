@@ -19,6 +19,7 @@ from .models import (
     SessionState,
 )
 from .rendering import (
+    CorrectionSummaryOverflow,
     RenderError,
     build_corrections_embed,
     build_instructions_embed,
@@ -46,6 +47,13 @@ LEVEL_BY_INDEX = {
     2: Level.ADVANCED,
 }
 MAX_CUSTOM_TEXT_LENGTH = 1_600
+CORRECTION_CONTINUATION_PLACEHOLDER = (
+    "Preparando continuación de correcciones… / "
+    "Preparing correction continuation…"
+)
+INACTIVE_CORRECTION_CONTINUATION = (
+    "Esta continuación no está activa. / This continuation is not active."
+)
 
 
 class LecturaController:
@@ -385,16 +393,14 @@ class LecturaController:
             items = parse_correction_lines(raw_items)
             await interaction.response.defer(ephemeral=True, thinking=True)
             async with self._ui_lock_for(text_channel_id):
-                transition = await self.service.add_corrections(
+                transition = await self._add_corrections_with_rollover(
                     text_channel_id=text_channel_id,
                     reading_message_id=reading_message_id,
                     corrector_id=member.id,
                     corrector_display_name=member.display_name,
                     items=items,
                     source=CorrectionSource.BUTTON,
-                    validator=self._validate_reading_render,
                 )
-                await self._refresh_reading(transition.state)
             await interaction.followup.send(transition.notice, ephemeral=True)
         except SessionError as error:
             await self._send_error(interaction, error.user_message)
@@ -471,16 +477,14 @@ class LecturaController:
         try:
             items = parse_correction_lines(message.content)
             async with self._ui_lock_for(state.text_channel_id):
-                transition = await self.service.add_corrections(
+                await self._add_corrections_with_rollover(
                     text_channel_id=state.text_channel_id,
                     reading_message_id=referenced_id,
                     corrector_id=message.author.id,
                     corrector_display_name=message.author.display_name,
                     items=items,
                     source=CorrectionSource.REPLY,
-                    validator=self._validate_reading_render,
                 )
-                await self._refresh_reading(transition.state)
         except SessionError:
             LOGGER.debug(
                 "ignored invalid correction reply from user %s",
@@ -488,6 +492,126 @@ class LecturaController:
             )
         except Exception:
             LOGGER.exception("failed to process correction reply")
+
+    async def _add_corrections_with_rollover(
+        self,
+        *,
+        text_channel_id: int,
+        reading_message_id: int,
+        corrector_id: int,
+        corrector_display_name: str,
+        items: list[str],
+        source: CorrectionSource,
+    ) -> Transition:
+        """Save one correction batch, rolling to a fresh message when full."""
+        try:
+            transition = await self.service.add_corrections(
+                text_channel_id=text_channel_id,
+                reading_message_id=reading_message_id,
+                corrector_id=corrector_id,
+                corrector_display_name=corrector_display_name,
+                items=items,
+                source=source,
+                validator=self._validate_reading_render,
+            )
+        except CorrectionSummaryOverflow:
+            return await self._rollover_correction_summary(
+                text_channel_id=text_channel_id,
+                reading_message_id=reading_message_id,
+                corrector_id=corrector_id,
+                corrector_display_name=corrector_display_name,
+                items=items,
+                source=source,
+            )
+        if not await self._refresh_reading(transition.state):
+            raise RuntimeError("active reading message is unavailable")
+        return transition
+
+    async def _rollover_correction_summary(
+        self,
+        *,
+        text_channel_id: int,
+        reading_message_id: int,
+        corrector_id: int,
+        corrector_display_name: str,
+        items: list[str],
+        source: CorrectionSource,
+    ) -> Transition:
+        """Publish an inert shell, atomically hand off state, then activate it."""
+        channel = await self._text_channel(text_channel_id)
+        continuation = await channel.send(
+            content=CORRECTION_CONTINUATION_PLACEHOLDER,
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+        try:
+            state = await self.service.get_session(text_channel_id)
+            reading = None if state is None else state.active_reading
+            if reading is None or reading.message_id != reading_message_id:
+                raise self._stale_turn()
+            await self._freeze_reading_message_strict(
+                text_channel_id,
+                reading,
+            )
+            transition = await self.service.rollover_corrections(
+                text_channel_id=text_channel_id,
+                old_reading_message_id=reading_message_id,
+                new_reading_message_id=continuation.id,
+                corrector_id=corrector_id,
+                corrector_display_name=corrector_display_name,
+                items=items,
+                source=source,
+                validator=self._validate_reading_render,
+            )
+        except Exception:
+            await self._mark_inactive_continuation(continuation)
+            await self._restore_current_reading(text_channel_id)
+            raise
+
+        reading = transition.state.active_reading
+        if reading is None or reading.message_id != continuation.id:
+            raise RuntimeError("correction rollover did not activate its message")
+        try:
+            await self._edit_reading_message(continuation, reading)
+        except Exception:
+            LOGGER.warning(
+                "initial activation of correction continuation %s failed; "
+                "retrying from canonical state",
+                continuation.id,
+                exc_info=True,
+            )
+            if not await self._restore_current_reading(text_channel_id):
+                raise
+        return transition
+
+    async def _mark_inactive_continuation(
+        self,
+        message: discord.Message,
+    ) -> None:
+        try:
+            await message.edit(
+                content=INACTIVE_CORRECTION_CONTINUATION,
+                embed=None,
+                view=None,
+                allowed_mentions=discord.AllowedMentions.none(),
+            )
+        except discord.HTTPException:
+            LOGGER.debug(
+                "could not mark inactive correction continuation %s",
+                message.id,
+            )
+
+    async def _restore_current_reading(self, text_channel_id: int) -> bool:
+        """Best-effort repair of whichever reading message is canonical."""
+        try:
+            state = await self.service.get_session(text_channel_id)
+            if state is None:
+                return False
+            return await self._refresh_reading(state)
+        except Exception:
+            LOGGER.exception(
+                "failed to restore reading after correction rollover failure"
+            )
+            return False
 
     async def handle_voice_departure(
         self,
@@ -792,6 +916,14 @@ class LecturaController:
         except discord.NotFound:
             LOGGER.warning("active reading message %s no longer exists", reading.message_id)
             return False
+        await self._edit_reading_message(message, reading)
+        return True
+
+    async def _edit_reading_message(
+        self,
+        message: discord.Message,
+        reading: ActiveReading,
+    ) -> None:
         await message.edit(
             content=build_reading_content(reading),
             embed=build_corrections_embed(reading),
@@ -801,7 +933,23 @@ class LecturaController:
             ),
             allowed_mentions=discord.AllowedMentions.none(),
         )
-        return True
+
+    async def _freeze_reading_message_strict(
+        self,
+        text_channel_id: int,
+        reading: ActiveReading,
+    ) -> None:
+        """Synchronize and freeze a reading before its canonical handoff."""
+        if reading.message_id is None:
+            raise RuntimeError("active reading has no Discord message")
+        channel = await self._text_channel(text_channel_id)
+        message = await channel.fetch_message(reading.message_id)
+        await message.edit(
+            content=build_reading_content(reading),
+            embed=build_corrections_embed(reading),
+            view=None,
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
 
     async def _retire_message(
         self,

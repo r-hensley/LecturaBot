@@ -62,7 +62,7 @@ def test_session_snapshot_round_trip_preserves_complete_state() -> None:
     restored = SessionState.from_dict(payload)
 
     assert restored == state
-    assert payload["snapshot_version"] == 1
+    assert payload["snapshot_version"] == 2
     assert payload["members"].keys() == {"10", "20"}
     assert payload["skip_votes"] == [20]
     assert payload["seen_text_ids_by_user"] == {
@@ -93,6 +93,49 @@ def test_legacy_room_wide_text_history_migrates_to_queued_readers() -> None:
     restored = SessionState.from_dict(payload)
 
     assert restored.seen_text_ids_by_user == {10: {4, 7}, 20: {4, 7}}
+
+
+def test_version_one_correction_snapshot_migrates_to_current_groups() -> None:
+    reading = ActiveReading(
+        reader_id=10,
+        reader_display_name="Reader",
+        language=Language.ENGLISH,
+        level=Level.BEGINNER,
+        body="Alpha.",
+        started_at=100,
+    )
+    reading.add_corrections(
+        corrector_id=20,
+        corrector_display_name="Listener",
+        items=["Alpha"],
+        source=CorrectionSource.REPLY,
+    )
+    state = SessionState(
+        session_id=12,
+        guild_id=1,
+        text_channel_id=101,
+        voice_channel_id=201,
+        phase=SessionPhase.READING,
+        queue=[10, 20],
+        members={10: _member(10, "Reader"), 20: _member(20, "Listener")},
+        current_index=0,
+        active_reading=reading,
+    )
+    payload = state.to_dict()
+    payload["snapshot_version"] = 1
+    reading_payload = payload["active_reading"]
+    assert isinstance(reading_payload, dict)
+    reading_payload["correction_groups"] = reading_payload.pop(
+        "current_correction_groups"
+    )
+    reading_payload.pop("archived_correction_groups")
+
+    restored = SessionState.from_dict(payload)
+
+    assert restored.active_reading is not None
+    assert restored.active_reading.archived_correction_groups == []
+    assert len(restored.active_reading.current_correction_groups) == 1
+    assert restored.to_dict()["snapshot_version"] == 2
 
 
 def test_snapshot_rejects_unsupported_version() -> None:
@@ -140,6 +183,48 @@ def test_duplicate_corrections_preserve_submission_chronology() -> None:
     assert reading.correction_count == 2
 
 
+def test_archived_corrections_remain_logical_but_new_groups_stay_current() -> None:
+    reading = ActiveReading(
+        reader_id=10,
+        reader_display_name="Reader",
+        language=Language.ENGLISH,
+        level=Level.BEGINNER,
+        body="Alpha beta.",
+        started_at=100,
+    )
+    reading.add_corrections(
+        corrector_id=20,
+        corrector_display_name="First",
+        items=["alpha"],
+        source=CorrectionSource.BUTTON,
+    )
+    archived_group = reading.current_correction_groups[0]
+    reading.archive_current_corrections()
+    reading.add_corrections(
+        corrector_id=20,
+        corrector_display_name="First",
+        items=["beta"],
+        source=CorrectionSource.REPLY,
+    )
+    reading.add_corrections(
+        corrector_id=30,
+        corrector_display_name="Second",
+        items=["ALPHA"],
+        source=CorrectionSource.BUTTON,
+    )
+
+    assert reading.archived_correction_groups == [archived_group]
+    assert [group.user_id for group in reading.current_correction_groups] == [
+        20,
+        30,
+    ]
+    assert reading.current_correction_groups[1].entries[0].discarded is True
+    assert reading.correction_count == 2
+    assert reading.correction_texts == ["alpha", "beta", "ALPHA"]
+    assert reading.current_correction_texts == ["beta", "ALPHA"]
+    assert ActiveReading.from_dict(reading.to_dict()) == reading
+
+
 def test_duplicate_normalization_and_legacy_snapshot_loading() -> None:
     reading = ActiveReading(
         reader_id=10,
@@ -163,12 +248,20 @@ def test_duplicate_normalization_and_legacy_snapshot_loading() -> None:
     )
 
     payload = reading.to_dict()
-    assert payload["correction_groups"][1]["entries"][0]["discarded"] is True
+    assert (
+        payload["current_correction_groups"][1]["entries"][0]["discarded"]
+        is True
+    )
     assert ActiveReading.from_dict(payload) == reading
     assert reading.correction_count == 1
 
-    # Older snapshots remain readable when the newly persisted flag is absent.
+    # Older snapshots remain readable when they use the original one-list shape
+    # and do not have the newly persisted duplicate flag.
     legacy_payload = reading.to_dict()
+    legacy_payload["correction_groups"] = legacy_payload.pop(
+        "current_correction_groups"
+    )
+    legacy_payload.pop("archived_correction_groups")
     for group in legacy_payload["correction_groups"]:
         for entry in group["entries"]:
             entry.pop("discarded")
@@ -179,6 +272,8 @@ def test_duplicate_normalization_and_legacy_snapshot_loading() -> None:
         for entry in group.entries
     )
     assert restored.correction_count == 1
+    assert restored.archived_correction_groups == []
+    assert restored.current_correction_groups == restored.correction_groups
 
 
 def test_correction_match_text_round_trip_and_legacy_fallback() -> None:

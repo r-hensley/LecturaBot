@@ -62,7 +62,11 @@ LecturaBot is a professional proof of concept for a bilingual Discord reading-se
   annotation text rather than aliases for words.
 - Native-language correction eligibility remains a community rule; the POC does not yet enforce language roles.
 - Correctors do not need to enter the reader queue, but they must be present in the matching voice channel.
-- Queue panels are capped at 25 participants. A reading stores at most 20 correction entries and 1,400 raw correction characters so Discord's message/embed limits cannot strand an active turn.
+- Queue panels are capped at 25 participants. Correction submissions retain
+  their per-entry and per-submission safeguards, while a full Discord correction
+  embed is frozen and continued in a new canonical reading message. Archived
+  groups remain visible with their original highlights and still participate in
+  duplicate detection and totals.
 - Custom texts are turn-local and are not added to the reusable catalog.
 - Catalog no-repeat history is tracked independently for each reader during one
   room session. It survives a bot restart and a temporary leave/rejoin while

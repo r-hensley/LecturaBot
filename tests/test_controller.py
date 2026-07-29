@@ -17,20 +17,32 @@ from lecturabot.models import (
     SessionPhase,
     SessionState,
 )
+from lecturabot.rendering import CorrectionSummaryOverflow
 from lecturabot.service import SessionError, Transition
-from lecturabot.views import QueueView
+from lecturabot.views import QueueView, ReadingView
 
 
 class _FakeMessage:
-    def __init__(self, message_id: int, name: str, events: list[str]) -> None:
+    def __init__(
+        self,
+        message_id: int,
+        name: str,
+        events: list[str],
+        *,
+        failed_edits: int = 0,
+    ) -> None:
         self.id = message_id
         self.name = name
         self.events = events
+        self.failed_edits = failed_edits
         self.edit_calls: list[dict[str, Any]] = []
 
     async def edit(self, **kwargs: Any) -> None:
         self.events.append(f"{self.name}.edit")
         self.edit_calls.append(kwargs)
+        if self.failed_edits:
+            self.failed_edits -= 1
+            raise RuntimeError("message edit failed")
 
 
 class _FakeChannel:
@@ -55,9 +67,11 @@ class _FakeChannel:
     async def fetch_message(self, message_id: int) -> _FakeMessage:
         self.events.append(f"fetch:{message_id}")
         self.fetch_calls.append(message_id)
-        if message_id != self.old_message.id:
-            raise AssertionError(f"unexpected message fetch: {message_id}")
-        return self.old_message
+        if message_id == self.old_message.id:
+            return self.old_message
+        if message_id == self.new_message.id:
+            return self.new_message
+        raise AssertionError(f"unexpected message fetch: {message_id}")
 
 
 class _FakeService:
@@ -170,6 +184,42 @@ class _CorrectionService:
         if self.error is not None:
             raise self.error
         return Transition(self.state, self.notice)
+
+
+class _RolloverCorrectionService(_CorrectionService):
+    def __init__(
+        self,
+        state: SessionState,
+        events: list[str],
+        *,
+        fail_rollover: bool = False,
+    ) -> None:
+        super().__init__(state)
+        self.events = events
+        self.fail_rollover = fail_rollover
+        self.rollover_calls: list[dict[str, Any]] = []
+
+    async def add_corrections(self, **kwargs: Any) -> Transition:
+        self.add_calls.append(kwargs)
+        raise CorrectionSummaryOverflow("simulated full correction summary")
+
+    async def rollover_corrections(self, **kwargs: Any) -> Transition:
+        self.events.append("persist")
+        self.rollover_calls.append(kwargs)
+        if self.fail_rollover:
+            raise RuntimeError("database write failed")
+        reading = self.state.active_reading
+        assert reading is not None
+        reading.message_id = kwargs["new_reading_message_id"]
+        return Transition(
+            self.state,
+            self.notice,
+            retired_reading_message_id=kwargs["old_reading_message_id"],
+            correction_rollover=True,
+        )
+
+    async def get_session(self, _: int) -> SessionState:
+        return self.state
 
 
 class _ReplacementService:
@@ -456,6 +506,146 @@ async def test_different_text_action_replaces_and_refreshes_current_reading() ->
     assert interaction.followup.send_calls == [
         ("A different text was selected.", {"ephemeral": True})
     ]
+
+
+@pytest.mark.asyncio
+async def test_full_correction_summary_hands_off_to_inert_continuation() -> None:
+    events: list[str] = []
+    state = _reading_state()
+    assert state.active_reading is not None
+    new_message = _FakeMessage(701, "new", events)
+    old_message = _FakeMessage(700, "old", events)
+    channel = _FakeChannel(
+        new_message=new_message,
+        old_message=old_message,
+        events=events,
+    )
+    service = _RolloverCorrectionService(state, events)
+    controller = _controller(service)
+
+    async def text_channel(_: int) -> _FakeChannel:
+        return channel
+
+    controller._text_channel = text_channel  # type: ignore[method-assign]
+
+    transition = await controller._add_corrections_with_rollover(
+        text_channel_id=101,
+        reading_message_id=700,
+        corrector_id=20,
+        corrector_display_name="Listener",
+        items=["short"],
+        source=CorrectionSource.BUTTON,
+    )
+
+    assert transition.correction_rollover is True
+    assert events == [
+        "send",
+        "fetch:700",
+        "old.edit",
+        "persist",
+        "new.edit",
+    ]
+    assert "view" not in channel.send_calls[0]
+    assert len(old_message.edit_calls) == 1
+    assert old_message.edit_calls[0]["content"].startswith("## Reader")
+    assert old_message.edit_calls[0]["embed"] is not None
+    assert old_message.edit_calls[0]["view"] is None
+    assert len(new_message.edit_calls) == 1
+    assert isinstance(new_message.edit_calls[0]["view"], ReadingView)
+    assert service.rollover_calls[0]["old_reading_message_id"] == 700
+    assert service.rollover_calls[0]["new_reading_message_id"] == 701
+    assert (
+        service.rollover_calls[0]["validator"]
+        == controller._validate_reading_render
+    )
+
+
+@pytest.mark.asyncio
+async def test_failed_correction_rollover_restores_old_controls() -> None:
+    events: list[str] = []
+    state = _reading_state()
+    new_message = _FakeMessage(701, "new", events)
+    old_message = _FakeMessage(700, "old", events)
+    channel = _FakeChannel(
+        new_message=new_message,
+        old_message=old_message,
+        events=events,
+    )
+    service = _RolloverCorrectionService(
+        state,
+        events,
+        fail_rollover=True,
+    )
+    controller = _controller(service)
+
+    async def text_channel(_: int) -> _FakeChannel:
+        return channel
+
+    controller._text_channel = text_channel  # type: ignore[method-assign]
+
+    with pytest.raises(RuntimeError, match="database write failed"):
+        await controller._add_corrections_with_rollover(
+            text_channel_id=101,
+            reading_message_id=700,
+            corrector_id=20,
+            corrector_display_name="Listener",
+            items=["short"],
+            source=CorrectionSource.REPLY,
+        )
+
+    assert events == [
+        "send",
+        "fetch:700",
+        "old.edit",
+        "persist",
+        "new.edit",
+        "fetch:700",
+        "old.edit",
+    ]
+    assert new_message.edit_calls[0]["view"] is None
+    assert isinstance(old_message.edit_calls[-1]["view"], ReadingView)
+
+
+@pytest.mark.asyncio
+async def test_correction_rollover_repairs_failed_continuation_activation() -> None:
+    events: list[str] = []
+    state = _reading_state()
+    new_message = _FakeMessage(701, "new", events, failed_edits=1)
+    old_message = _FakeMessage(700, "old", events)
+    channel = _FakeChannel(
+        new_message=new_message,
+        old_message=old_message,
+        events=events,
+    )
+    service = _RolloverCorrectionService(state, events)
+    controller = _controller(service)
+
+    async def text_channel(_: int) -> _FakeChannel:
+        return channel
+
+    controller._text_channel = text_channel  # type: ignore[method-assign]
+
+    transition = await controller._add_corrections_with_rollover(
+        text_channel_id=101,
+        reading_message_id=700,
+        corrector_id=20,
+        corrector_display_name="Listener",
+        items=["short"],
+        source=CorrectionSource.BUTTON,
+    )
+
+    assert transition.correction_rollover is True
+    assert events == [
+        "send",
+        "fetch:700",
+        "old.edit",
+        "persist",
+        "new.edit",
+        "fetch:701",
+        "new.edit",
+    ]
+    assert len(new_message.edit_calls) == 2
+    assert isinstance(new_message.edit_calls[-1]["view"], ReadingView)
 
 
 @pytest.mark.asyncio

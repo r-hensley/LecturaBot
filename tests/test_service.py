@@ -19,6 +19,7 @@ from lecturabot.models import (
     SessionState,
 )
 from lecturabot.repository import STATISTICS_INACTIVITY_SECONDS, SQLiteRepository
+from lecturabot.rendering import CorrectionSummaryOverflow
 from lecturabot.service import (
     SessionError,
     SessionService,
@@ -42,8 +43,6 @@ async def _make_service(
     text_channel_id: int = 101,
     voice_channel_id: int = 201,
     maximum_participants: int = 25,
-    maximum_correction_entries: int = 20,
-    maximum_correction_characters: int = 1_400,
 ) -> tuple[SessionService, SQLiteRepository, ManualClock]:
     repository = SQLiteRepository(tmp_path / f"{name}.sqlite3")
     await repository.initialize()
@@ -65,8 +64,6 @@ async def _make_service(
     service = SessionService(
         repository,
         maximum_participants=maximum_participants,
-        maximum_correction_entries=maximum_correction_entries,
-        maximum_correction_characters=maximum_correction_characters,
         clock=clock,
         chooser=lambda candidates: candidates[0],
     )
@@ -1641,16 +1638,11 @@ async def test_correction_validator_rejects_before_state_is_committed(
 
 
 @pytest.mark.asyncio
-async def test_aggregate_correction_limits_reject_before_persisting(
+async def test_full_correction_summary_rolls_over_atomically(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    service, repository, _ = await _make_service(
-        tmp_path,
-        maximum_correction_entries=2,
-        maximum_correction_characters=10,
-    )
-    await _join(service, 10, 20)
+    service, repository, _ = await _make_service(tmp_path)
+    await _join(service, 10, 20, 30)
     await service.start(text_channel_id=101, actor_id=10)
     await service.set_picker_message(
         text_channel_id=101,
@@ -1679,35 +1671,104 @@ async def test_aggregate_correction_limits_reject_before_persisting(
     )
     before = accepted.state
 
-    save_spy = AsyncMock(wraps=repository.save_session)
-    monkeypatch.setattr(repository, "save_session", save_spy)
+    def allow_one_current_entry(reading: ActiveReading) -> None:
+        current_entries = sum(
+            len(group.entries)
+            for group in reading.current_correction_groups
+        )
+        if current_entries > 1:
+            raise CorrectionSummaryOverflow("simulated full summary")
 
-    with pytest.raises(SessionError) as too_many_entries:
+    with pytest.raises(CorrectionSummaryOverflow):
         await service.add_corrections(
             text_channel_id=101,
             reading_message_id=700,
-            corrector_id=20,
-            corrector_display_name="Reader 20",
-            items=["A", "reading"],
-            source=CorrectionSource.BUTTON,
+            corrector_id=30,
+            corrector_display_name="Reader 30",
+            items=["short"],
+            source=CorrectionSource.REPLY,
+            validator=allow_one_current_entry,
         )
-    _assert_error(too_many_entries, "correction_summary_full")
 
-    with pytest.raises(SessionError) as too_many_characters:
-        await service.add_corrections(
+    unchanged = await service.get_session(101)
+    assert unchanged is not None
+    assert unchanged.to_dict() == before.to_dict()
+
+    rolled_over = await service.rollover_corrections(
+        text_channel_id=101,
+        old_reading_message_id=700,
+        new_reading_message_id=701,
+        corrector_id=30,
+        corrector_display_name="Reader 30",
+        items=["short"],
+        source=CorrectionSource.REPLY,
+        validator=allow_one_current_entry,
+    )
+
+    reading = rolled_over.state.active_reading
+    persisted = await repository.load_session(101)
+    assert reading is not None
+    assert persisted is not None
+    assert persisted.to_dict() == rolled_over.state.to_dict()
+    assert reading.message_id == 701
+    assert [group.user_id for group in reading.archived_correction_groups] == [
+        20
+    ]
+    assert [group.user_id for group in reading.current_correction_groups] == [
+        30
+    ]
+    assert reading.current_correction_groups[0].entries[0].discarded is True
+    assert rolled_over.retired_reading_message_id == 700
+    assert rolled_over.correction_rollover is True
+    assert await service.find_by_reading_message(700) is None
+    assert await service.find_by_reading_message(701) is not None
+
+
+@pytest.mark.asyncio
+async def test_failed_correction_rollover_leaves_canonical_state_unchanged(
+    tmp_path: Path,
+) -> None:
+    service, repository, _ = await _make_service(tmp_path)
+    await _join(service, 10, 20)
+    await service.start(text_channel_id=101, actor_id=10)
+    await service.set_picker_message(
+        text_channel_id=101,
+        reader_id=10,
+        message_id=500,
+    )
+    await service.begin_custom_reading(
+        text_channel_id=101,
+        reader_id=10,
+        picker_message_id=500,
+        language=Language.ENGLISH,
+        body="A short reading.",
+    )
+    await service.set_reading_message(
+        text_channel_id=101,
+        reader_id=10,
+        message_id=700,
+    )
+    before = await service.get_session(101)
+
+    def reject_render(_: ActiveReading) -> None:
+        raise CorrectionSummaryOverflow("submission cannot fit")
+
+    with pytest.raises(CorrectionSummaryOverflow):
+        await service.rollover_corrections(
             text_channel_id=101,
-            reading_message_id=700,
+            old_reading_message_id=700,
+            new_reading_message_id=701,
             corrector_id=20,
             corrector_display_name="Reader 20",
-            items=["reading"],
+            items=["short"],
             source=CorrectionSource.BUTTON,
+            validator=reject_render,
         )
-    _assert_error(too_many_characters, "correction_summary_full")
 
     after = await service.get_session(101)
     persisted = await repository.load_session(101)
+    assert before is not None
     assert after is not None
     assert persisted is not None
     assert after.to_dict() == before.to_dict()
     assert persisted.to_dict() == before.to_dict()
-    save_spy.assert_not_awaited()

@@ -49,6 +49,7 @@ class Transition:
     votes_required: int = 0
     advanced: bool = False
     repost_queue: bool = False
+    correction_rollover: bool = False
 
 
 def parse_correction_lines(
@@ -93,8 +94,6 @@ class SessionService:
         minimum_participants: int = 1,
         maximum_participants: int = 25,
         skip_vote_threshold: int = 3,
-        maximum_correction_entries: int = 20,
-        maximum_correction_characters: int = 1_400,
         clock: Callable[[], int] | None = None,
         chooser: Callable[[Sequence[ReadingText]], ReadingText] | None = None,
     ) -> None:
@@ -106,16 +105,10 @@ class SessionService:
             )
         if skip_vote_threshold < 1:
             raise ValueError("skip_vote_threshold must be positive")
-        if maximum_correction_entries < 1:
-            raise ValueError("maximum_correction_entries must be positive")
-        if maximum_correction_characters < 1:
-            raise ValueError("maximum_correction_characters must be positive")
         self.repository = repository
         self.minimum_participants = minimum_participants
         self.maximum_participants = maximum_participants
         self.skip_vote_threshold = skip_vote_threshold
-        self.maximum_correction_entries = maximum_correction_entries
-        self.maximum_correction_characters = maximum_correction_characters
         self._clock = clock or (lambda: int(time.time()))
         self._chooser = chooser or random.choice
         self._states: dict[int, SessionState] = {}
@@ -670,97 +663,146 @@ class SessionService:
             state = self._snapshot(
                 self._require_state(await self._load_locked(text_channel_id))
             )
-            reading = state.active_reading
-            if state.phase is not SessionPhase.READING or reading is None:
-                raise self._wrong_phase("reading")
-            if reading.message_id != reading_message_id:
-                raise SessionError(
-                    "stale_reading",
-                    "Ese texto ya no está activo. / That reading is no longer active.",
-                )
-            if corrector_id == reading.reader_id:
-                raise SessionError(
-                    "reader_correction",
-                    "El lector no puede corregirse a sí mismo. / "
-                    "The reader cannot submit their own corrections.",
-                )
-            match_texts: list[str | None] = []
-            for item in items:
-                match_texts.append(
-                    find_correction_target(
-                        reading.body,
-                        item,
-                        language=reading.language.value,
-                    )
-                )
-
-            seen_in_submission: set[str] = set()
-            seen_by_corrector = {
-                reading._normalize_correction(entry.text)
-                for group in reading.correction_groups
-                if group.user_id == corrector_id
-                for entry in group.entries
-            }
-            for item in items:
-                normalized = reading._normalize_correction(item)
-                if (
-                    normalized in seen_in_submission
-                    or normalized in seen_by_corrector
-                ):
-                    raise SessionError(
-                        "duplicate_correction",
-                        "Esa corrección ya fue enviada por ti. / "
-                        "You already submitted that correction.",
-                    )
-                seen_in_submission.add(normalized)
-            existing_entries = sum(
-                len(group.entries) for group in reading.correction_groups
+            reading = self._require_correction_reading(
+                state,
+                reading_message_id=reading_message_id,
+                corrector_id=corrector_id,
             )
-            existing_characters = sum(
-                len(entry.text)
-                for group in reading.correction_groups
-                for entry in group.entries
-            )
-            if existing_entries + len(items) > self.maximum_correction_entries:
-                raise SessionError(
-                    "correction_summary_full",
-                    "La lista de correcciones está llena; comparte lo demás en "
-                    "voz. / The correction list is full; share anything else "
-                    "in voice.",
-                )
-            if (
-                existing_characters + sum(len(item) for item in items)
-                > self.maximum_correction_characters
-            ):
-                raise SessionError(
-                    "correction_summary_full",
-                    "Las correcciones son demasiado largas para mostrarlas. / "
-                    "The corrections are too long to display.",
-                )
-            reading.add_corrections(
+            match_texts = self._append_correction_items(
+                reading,
                 corrector_id=corrector_id,
                 corrector_display_name=corrector_display_name,
                 items=items,
                 source=source,
-                match_texts=match_texts,
             )
             if validator is not None:
                 validator(reading)
             await self._persist_locked(state)
-            unhighlighted_count = sum(
-                match_text is None for match_text in match_texts
-            )
-            notice = "Correcciones guardadas. / Corrections saved."
-            if unhighlighted_count:
-                notice = (
-                    "Correcciones guardadas. Sin resaltar: "
-                    f"{unhighlighted_count}. / Corrections saved. Listed "
-                    f"without highlighting: {unhighlighted_count}."
-                )
             return Transition(
                 self._snapshot(state),
-                notice,
+                self._correction_notice(match_texts),
             )
+
+    async def rollover_corrections(
+        self,
+        *,
+        text_channel_id: int,
+        old_reading_message_id: int,
+        new_reading_message_id: int,
+        corrector_id: int,
+        corrector_display_name: str,
+        items: list[str],
+        source: CorrectionSource,
+        validator: Callable[[ActiveReading], None] | None = None,
+    ) -> Transition:
+        """Freeze a full summary and atomically activate its continuation."""
+        if new_reading_message_id == old_reading_message_id:
+            raise ValueError("the continuation message must have a new ID")
+        async with self._lock_for(text_channel_id):
+            state = self._snapshot(
+                self._require_state(await self._load_locked(text_channel_id))
+            )
+            reading = self._require_correction_reading(
+                state,
+                reading_message_id=old_reading_message_id,
+                corrector_id=corrector_id,
+            )
+            reading.archive_current_corrections()
+            reading.message_id = new_reading_message_id
+            match_texts = self._append_correction_items(
+                reading,
+                corrector_id=corrector_id,
+                corrector_display_name=corrector_display_name,
+                items=items,
+                source=source,
+            )
+            if validator is not None:
+                validator(reading)
+            await self._persist_locked(state)
+            return Transition(
+                self._snapshot(state),
+                self._correction_notice(match_texts),
+                retired_reading_message_id=old_reading_message_id,
+                correction_rollover=True,
+            )
+
+    def _require_correction_reading(
+        self,
+        state: SessionState,
+        *,
+        reading_message_id: int,
+        corrector_id: int,
+    ) -> ActiveReading:
+        reading = state.active_reading
+        if state.phase is not SessionPhase.READING or reading is None:
+            raise self._wrong_phase("reading")
+        if reading.message_id != reading_message_id:
+            raise SessionError(
+                "stale_reading",
+                "Ese texto ya no está activo. / That reading is no longer active.",
+            )
+        if corrector_id == reading.reader_id:
+            raise SessionError(
+                "reader_correction",
+                "El lector no puede corregirse a sí mismo. / "
+                "The reader cannot submit their own corrections.",
+            )
+        return reading
+
+    @staticmethod
+    def _append_correction_items(
+        reading: ActiveReading,
+        *,
+        corrector_id: int,
+        corrector_display_name: str,
+        items: list[str],
+        source: CorrectionSource,
+    ) -> list[str | None]:
+        match_texts = [
+            find_correction_target(
+                reading.body,
+                item,
+                language=reading.language.value,
+            )
+            for item in items
+        ]
+        seen_in_submission: set[str] = set()
+        seen_by_corrector = {
+            reading._normalize_correction(entry.text)
+            for group in reading.correction_groups
+            if group.user_id == corrector_id
+            for entry in group.entries
+        }
+        for item in items:
+            normalized = reading._normalize_correction(item)
+            if normalized in seen_in_submission or normalized in seen_by_corrector:
+                raise SessionError(
+                    "duplicate_correction",
+                    "Esa corrección ya fue enviada por ti. / "
+                    "You already submitted that correction.",
+                )
+            seen_in_submission.add(normalized)
+        reading.add_corrections(
+            corrector_id=corrector_id,
+            corrector_display_name=corrector_display_name,
+            items=items,
+            source=source,
+            match_texts=match_texts,
+        )
+        return match_texts
+
+    @staticmethod
+    def _correction_notice(match_texts: list[str | None]) -> str:
+        unhighlighted_count = sum(
+            match_text is None for match_text in match_texts
+        )
+        if not unhighlighted_count:
+            return "Correcciones guardadas. / Corrections saved."
+        return (
+            "Correcciones guardadas. Sin resaltar: "
+            f"{unhighlighted_count}. / Corrections saved. Listed "
+            f"without highlighting: {unhighlighted_count}."
+        )
 
     async def pass_turn(
         self,
