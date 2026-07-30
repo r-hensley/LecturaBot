@@ -1,29 +1,84 @@
-# Reading catalog source snapshot
+# Reading catalog sources
 
-`google_doc_readings.txt` is the plain-text export downloaded on 2026-07-11
-from the community's shared **Texts for Sesión de Lectura** document:
+LecturaBot's runtime catalog is built entirely from committed snapshots. The
+bot never contacts Google Drive while running.
+
+## Maintained inputs
+
+`expanded_spreadsheet_readings.json` is the column-A extraction of the expanded
+community workbook downloaded on 2026-07-29:
+
+<https://docs.google.com/spreadsheets/d/13K89RT43GZj1fvrTym9eoSZDlnDwzEFH/edit>
+
+The snapshot includes the source sheet and cell for every entry. Its metadata
+records the original XLSX SHA-256. The importer also verifies that each source
+text in column A is identical to the workbook's duplicate column B.
+
+`legacy_catalog_2026-07-11.json` is the structured snapshot of the 1,014
+previously active English and Spanish readings. It supplies the 133 passages
+that are absent from the expanded spreadsheet and the four cases where the
+legacy passage is complete while the spreadsheet contains only an excerpt.
+
+`google_doc_readings.txt` is retained as the historical raw export behind that
+legacy snapshot. Its malformed fence boundaries and repeated headings are no
+longer part of the active build.
 
 <https://docs.google.com/document/d/1O2KZYIn1S5xcWHAOvSo3bN2Wx-f-D1qKd9mMW6U5DhM/edit>
 
-The bot never contacts Google Docs at runtime. The committed source snapshot is
-converted into `src/lecturabot/data/google_doc_readings.json` with:
+`legacy_retired_readings_2026-07-20.json` preserves the 13 passages retired
+before this merge. It is an exclusion guard and historical record rather than
+a runtime seed.
+
+## Reconciliation policy
+
+The build checks every legacy reading against one and only one reviewed group:
+
+- 820 equivalent passages represented by the spreadsheet
+- 50 near-equivalent passages reviewed individually
+- 7 passages contained in two compound spreadsheet cells
+- 4 complete legacy passages replacing spreadsheet excerpts
+- 133 legacy-only passages retained to prevent content loss
+
+For equivalent alternatives, the spreadsheet version wins. A legacy or hybrid
+version is used only where review found a material grammar, spelling, meaning,
+or completeness issue. Two compound cells are split only at their existing
+line/story boundaries so every resulting Discord passage remains renderable.
+
+The source inventory also contains 37 French and 235 Portuguese readings.
+They are reported as held rather than silently discarded: French needs a full
+picker/runtime language slice, and the Portuguese sheet does not assign levels.
+
+## Build and verification
+
+Regenerate the runtime catalog and deterministic report with:
 
 ```bash
 /mnt/c/Users/ryry0/Documents/Python/.venv/bin/python \
-  scripts/build_google_doc_catalog.py
+  scripts/build_catalog.py
 ```
 
-The source document contains repeated headings and six malformed fence
-boundaries. The build script repairs only those explicitly recorded locations,
-validates all category counts and body lengths, and fails if the snapshot's
-structure changes unexpectedly.
+Verify that both generated files are current:
 
-The three-level bot interface uses this mapping:
+```bash
+/mnt/c/Users/ryry0/Documents/Python/.venv/bin/python \
+  scripts/build_catalog.py --check
+```
 
-| Source category | LecturaBot level |
-| --- | --- |
-| Easy / Fácil | Beginner / Principiante |
-| Medium / Intermedio | Intermediate / Intermedio |
-| Hard / Difícil | Advanced / Avanzado |
-| Super Hard / Super Difícil | Advanced / Avanzado |
-| SFW Halloween | Advanced / Avanzado |
+The outputs are:
+
+- `src/lecturabot/data/catalog.json`
+- `sources/catalog_build_report.json`
+
+To refresh the committed snapshot from a newly downloaded workbook:
+
+```bash
+/mnt/c/Users/ryry0/Documents/Python/.venv/bin/python \
+  scripts/extract_spreadsheet_catalog.py /path/to/readings.xlsx \
+  --downloaded-on YYYY-MM-DD
+```
+
+Review and update the reconciliation constants in `scripts/build_catalog.py`
+when source content changes. The builder intentionally fails on count,
+reference, duplicate, coverage, hidden-character, or body-length drift.
+`tests/test_catalog_data.py` additionally renders every active passage and
+enforces Discord's 2,000-character message limit.

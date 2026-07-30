@@ -5,53 +5,65 @@ import json
 from pathlib import Path
 import warnings
 
-from lecturabot.bot import CATALOG_RETIREMENT_RESOURCES, CATALOG_SEED_RESOURCES
+from lecturabot.bot import CATALOG_RESOURCE
 from lecturabot.models import ActiveReading, Language, Level
 from lecturabot.rendering import build_reading_content
 from lecturabot.repository import SQLiteRepository
-from scripts.build_google_doc_catalog import (
-    CATALOG_EXCLUSIONS,
+from scripts.build_catalog import (
+    DEFAULT_LEGACY_SOURCE,
     DEFAULT_OUTPUT,
-    DEFAULT_SOURCE,
-    EXPECTED_SOURCE_COUNTS,
-    SOURCE_CATEGORY_TO_CATALOG,
+    DEFAULT_REPORT,
+    EXPECTED_ACTIVE_COUNTS,
+    EXPECTED_EMOTION_COUNT,
+    EXPECTED_HELD_COUNTS,
+    MAX_BODY_LENGTH,
     build_catalog,
     render_catalog,
+    render_report,
 )
 
 
-def test_google_doc_catalog_matches_vendored_source_snapshot() -> None:
-    records = build_catalog(DEFAULT_SOURCE.read_text(encoding="utf-8-sig"))
-
-    assert len(records) == sum(EXPECTED_SOURCE_COUNTS.values()) - len(
-        CATALOG_EXCLUSIONS
-    ) == 1_014
-    assert DEFAULT_OUTPUT.read_text(encoding="utf-8") == render_catalog(records)
+def _body_key(body: object) -> str:
+    return "".join(character for character in str(body).casefold() if character.isalnum())
 
 
-def test_google_doc_catalog_mapping_and_discord_render_limits() -> None:
+def test_merged_catalog_matches_both_vendored_source_snapshots() -> None:
+    result = build_catalog()
+
+    assert len(result.records) == sum(EXPECTED_ACTIVE_COUNTS.values()) == 1_936
+    assert DEFAULT_OUTPUT.read_text(encoding="utf-8") == render_catalog(
+        result.records
+    )
+    assert DEFAULT_REPORT.read_text(encoding="utf-8") == render_report(
+        result.report
+    )
+    assert result.report["legacy_reconciliation"] == {
+        "readings": 1_014,
+        "equivalent": 820,
+        "reviewed_variants": 50,
+        "compound_parts": 7,
+        "fuller_legacy_replacements": 4,
+        "legacy_only": 133,
+        "historically_retired": 13,
+    }
+
+
+def test_catalog_counts_provenance_and_discord_render_limits() -> None:
     records: list[dict[str, object]] = json.loads(
         DEFAULT_OUTPUT.read_text(encoding="utf-8")
     )
-    expected_counts = Counter(
-        {
-            (language, level, source_category): count
-            for source, count in EXPECTED_SOURCE_COUNTS.items()
-            for language, level, source_category in [
-                SOURCE_CATEGORY_TO_CATALOG[source]
-            ]
-        }
-    )
     actual_counts = Counter(
-        (item["language"], item["level"], item["source_category"])
-        for item in records
+        (str(item["language"]), str(item["level"])) for item in records
     )
-    expected_counts[("en", "advanced", "super_hard")] -= len(CATALOG_EXCLUSIONS)
 
-    assert actual_counts == expected_counts
-    assert len({" ".join(str(item["body"]).split()).casefold() for item in records}) == len(
-        records
+    assert actual_counts == Counter(EXPECTED_ACTIVE_COUNTS)
+    assert not {str(item["language"]) for item in records} & {"fr", "pt"}
+    assert len({_body_key(item["body"]) for item in records}) == len(records)
+    assert sum("expected_emotion" in item for item in records) == (
+        EXPECTED_EMOTION_COUNT
     )
+    assert max(len(str(item["body"])) for item in records) <= MAX_BODY_LENGTH
+    assert all(item.get("source_kind") and item.get("source_ref") for item in records)
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", DeprecationWarning)
@@ -63,40 +75,50 @@ def test_google_doc_catalog_mapping_and_discord_render_limits() -> None:
                 level=Level(str(item["level"])),
                 body=str(item["body"]),
                 started_at=1,
+                expected_emotion=(
+                    None
+                    if item.get("expected_emotion") is None
+                    else str(item["expected_emotion"])
+                ),
             )
             assert len(build_reading_content(reading)) <= 2_000
 
 
-def test_retired_catalog_entries_are_not_in_active_seed() -> None:
-    retirement_path = Path("src/lecturabot/data/retired_readings.json")
-    retired_records = json.loads(retirement_path.read_text(encoding="utf-8"))
-    google_records = json.loads(DEFAULT_OUTPUT.read_text(encoding="utf-8"))
+def test_source_inventory_preserves_held_french_and_portuguese() -> None:
+    report = json.loads(DEFAULT_REPORT.read_text(encoding="utf-8"))
+    held = {
+        (item["language"], item["level"]): item["count"]
+        for item in report["spreadsheet"]["held_counts"]
+    }
 
-    assert len(retired_records) == 13
-    assert not {
-        " ".join(str(item["body"]).split()).casefold() for item in retired_records
-    } & {" ".join(str(item["body"]).split()).casefold() for item in google_records}
+    assert held == EXPECTED_HELD_COUNTS
+    assert report["spreadsheet"]["held_language_rows"] == 272
 
 
-async def test_runtime_seeds_catalog_and_disables_legacy_entries(
+async def test_runtime_sync_reconciles_an_existing_legacy_catalog(
     tmp_path: Path,
 ) -> None:
-    assert CATALOG_SEED_RESOURCES == ("data/google_doc_readings.json",)
-    assert CATALOG_RETIREMENT_RESOURCES == ("data/retired_readings.json",)
-    assert len(SQLiteRepository._read_seed_records(DEFAULT_OUTPUT)) == 1_014
-    retirement_path = Path("src/lecturabot/data/retired_readings.json")
-    assert len(SQLiteRepository._read_seed_records(retirement_path)) == 13
+    assert CATALOG_RESOURCE == "data/catalog.json"
+    assert len(SQLiteRepository._read_seed_records(DEFAULT_OUTPUT)) == 1_936
 
     repository = SQLiteRepository(tmp_path / "catalog.sqlite3")
     await repository.initialize()
-    seed_paths = [Path("src/lecturabot") / name for name in CATALOG_SEED_RESOURCES]
+    assert await repository.seed_texts(DEFAULT_LEGACY_SOURCE) == 1_014
 
-    # Simulate entries retained by a database created before their retirement.
-    assert await repository.seed_texts(retirement_path) == 13
-    assert sum([await repository.seed_texts(path) for path in seed_paths]) == 1_014
-    assert sum([await repository.seed_texts(path) for path in seed_paths]) == 0
-    assert await repository.disable_texts(retirement_path) == 13
-    assert await repository.disable_texts(retirement_path) == 0
+    first = await repository.sync_texts(DEFAULT_OUTPUT)
+    assert (
+        first.inserted,
+        first.reenabled,
+        first.updated,
+        first.disabled,
+    ) == (989, 0, 0, 67)
+    second = await repository.sync_texts(DEFAULT_OUTPUT)
+    assert (second.inserted, second.reenabled, second.updated, second.disabled) == (
+        0,
+        0,
+        0,
+        0,
+    )
 
     active_count = sum(
         [
@@ -105,4 +127,4 @@ async def test_runtime_seeds_catalog_and_disables_legacy_entries(
             for level in Level
         ]
     )
-    assert active_count == 1_014
+    assert active_count == 1_936

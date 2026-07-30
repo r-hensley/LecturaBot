@@ -187,6 +187,114 @@ async def test_seed_is_idempotent_and_catalog_filters_language_and_level(
     ] == ["Second English text."]
 
 
+async def test_catalog_sync_inserts_updates_reenables_and_disables(
+    tmp_path: Path,
+) -> None:
+    repository = await _repository(tmp_path)
+    empty_path = tmp_path / "empty.json"
+    empty_path.write_text("[]", encoding="utf-8")
+    with pytest.raises(
+        RepositoryError,
+        match="authoritative reading catalog is empty",
+    ):
+        await repository.sync_texts(empty_path)
+
+    initial_path = tmp_path / "initial.json"
+    initial_path.write_text(
+        json.dumps(
+            [
+                {
+                    "language": "en",
+                    "level": "beginner",
+                    "body": "Keep and update emotion.",
+                    "expected_emotion": "Old",
+                },
+                {
+                    "language": "en",
+                    "level": "beginner",
+                    "body": "Remove from active catalog.",
+                },
+                {
+                    "language": "es",
+                    "level": "beginner",
+                    "body": "Volver a activar.",
+                },
+            ]
+        ),
+        encoding="utf-8",
+    )
+    assert await repository.seed_texts(initial_path) == 3
+    retirement_path = tmp_path / "retire.json"
+    retirement_path.write_text(
+        json.dumps(
+            [
+                {
+                    "language": "es",
+                    "level": "beginner",
+                    "body": "Volver a activar.",
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+    assert await repository.disable_texts(retirement_path) == 1
+
+    desired_path = tmp_path / "desired.json"
+    desired_path.write_text(
+        json.dumps(
+            [
+                {
+                    "language": "en",
+                    "level": "beginner",
+                    "body": "Keep and update emotion.",
+                    "expected_emotion": "New",
+                },
+                {
+                    "language": "es",
+                    "level": "beginner",
+                    "body": "Volver a activar.",
+                },
+                {
+                    "language": "en",
+                    "level": "advanced",
+                    "body": "Brand-new passage.",
+                },
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    result = await repository.sync_texts(desired_path)
+    assert (
+        result.inserted,
+        result.reenabled,
+        result.updated,
+        result.disabled,
+    ) == (1, 1, 1, 1)
+    assert [
+        (text.body, text.expected_emotion)
+        for text in await repository.list_texts(
+            language=Language.ENGLISH,
+            level=Level.BEGINNER,
+        )
+    ] == [("Keep and update emotion.", "New")]
+    assert [
+        text.body
+        for text in await repository.list_texts(
+            language=Language.SPANISH,
+            level=Level.BEGINNER,
+        )
+    ] == ["Volver a activar."]
+
+    repeated = await repository.sync_texts(desired_path)
+    assert (
+        repeated.inserted,
+        repeated.reenabled,
+        repeated.updated,
+        repeated.disabled,
+    ) == (0, 0, 0, 0)
+
+
 async def test_session_round_trip_and_load_all(tmp_path: Path) -> None:
     repository = await _repository(tmp_path)
     state = _session()

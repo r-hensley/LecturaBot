@@ -10,6 +10,7 @@ use a supported asynchronous driver.
 from __future__ import annotations
 
 import asyncio
+from dataclasses import dataclass
 import json
 from pathlib import Path
 import sqlite3
@@ -21,6 +22,16 @@ from .models import Language, Level, ReadingText, SessionState
 
 SCHEMA_VERSION = 2
 STATISTICS_INACTIVITY_SECONDS = 6 * 60 * 60
+
+
+@dataclass(frozen=True, slots=True)
+class CatalogSyncResult:
+    """Counts from one authoritative catalog synchronization."""
+
+    inserted: int
+    reenabled: int
+    updated: int
+    disabled: int
 
 
 class RepositoryError(RuntimeError):
@@ -508,6 +519,18 @@ class SQLiteRepository:
         async with self._write_lock:
             return self._seed_texts_sync(records)
 
+    async def sync_texts(self, catalog_path: Path) -> CatalogSyncResult:
+        """Make the enabled catalog exactly match one authoritative snapshot.
+
+        Existing rows are retained as disabled history.  Matching rows are
+        re-enabled and receive the snapshot's current expected-emotion label.
+        """
+        records = self._read_seed_records(catalog_path)
+        if not records:
+            raise RepositoryError("authoritative reading catalog is empty")
+        async with self._write_lock:
+            return self._sync_texts_sync(records)
+
     async def disable_texts(self, retirement_path: Path) -> int:
         """Disable matching catalog records and return the changed row count."""
         records = self._read_seed_records(retirement_path)
@@ -540,6 +563,9 @@ class SQLiteRepository:
             if not body:
                 raise RepositoryError(f"empty reading seed record at index {index}")
             records.append((language.value, level.value, body, expected_emotion))
+        keys = [(language, level, body) for language, level, body, _ in records]
+        if len(set(keys)) != len(keys):
+            raise RepositoryError(f"duplicate reading seed record in {seed_path}")
         return records
 
     def _seed_texts_sync(
@@ -559,6 +585,151 @@ class SQLiteRepository:
             )
             connection.commit()
             return connection.total_changes - before
+        finally:
+            connection.close()
+
+    def _sync_texts_sync(
+        self,
+        records: list[tuple[str, str, str, str | None]],
+    ) -> CatalogSyncResult:
+        connection = self._connect()
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            connection.execute(
+                """
+                CREATE TEMP TABLE desired_reading_texts (
+                    language TEXT NOT NULL,
+                    level TEXT NOT NULL,
+                    body TEXT NOT NULL,
+                    expected_emotion TEXT,
+                    PRIMARY KEY (language, level, body)
+                ) WITHOUT ROWID
+                """
+            )
+            connection.executemany(
+                """
+                INSERT INTO desired_reading_texts (
+                    language, level, body, expected_emotion
+                ) VALUES (?, ?, ?, ?)
+                """,
+                records,
+            )
+
+            inserted = int(
+                connection.execute(
+                    """
+                    SELECT COUNT(*)
+                    FROM desired_reading_texts AS desired
+                    WHERE NOT EXISTS (
+                        SELECT 1
+                        FROM reading_texts AS current
+                        WHERE current.language = desired.language
+                          AND current.level = desired.level
+                          AND current.body = desired.body
+                    )
+                    """
+                ).fetchone()[0]
+            )
+            reenabled = int(
+                connection.execute(
+                    """
+                    SELECT COUNT(*)
+                    FROM reading_texts AS current
+                    WHERE current.enabled = 0
+                      AND EXISTS (
+                          SELECT 1
+                          FROM desired_reading_texts AS desired
+                          WHERE current.language = desired.language
+                            AND current.level = desired.level
+                            AND current.body = desired.body
+                      )
+                    """
+                ).fetchone()[0]
+            )
+            updated = int(
+                connection.execute(
+                    """
+                    SELECT COUNT(*)
+                    FROM reading_texts AS current
+                    JOIN desired_reading_texts AS desired
+                      ON current.language = desired.language
+                     AND current.level = desired.level
+                     AND current.body = desired.body
+                    WHERE current.expected_emotion
+                          IS NOT desired.expected_emotion
+                    """
+                ).fetchone()[0]
+            )
+            disabled = int(
+                connection.execute(
+                    """
+                    SELECT COUNT(*)
+                    FROM reading_texts AS current
+                    WHERE current.enabled = 1
+                      AND NOT EXISTS (
+                          SELECT 1
+                          FROM desired_reading_texts AS desired
+                          WHERE current.language = desired.language
+                            AND current.level = desired.level
+                            AND current.body = desired.body
+                      )
+                    """
+                ).fetchone()[0]
+            )
+
+            connection.execute(
+                """
+                INSERT OR IGNORE INTO reading_texts (
+                    language, level, body, expected_emotion
+                )
+                SELECT language, level, body, expected_emotion
+                FROM desired_reading_texts
+                """
+            )
+            connection.execute(
+                """
+                UPDATE reading_texts AS current
+                SET expected_emotion = (
+                        SELECT desired.expected_emotion
+                        FROM desired_reading_texts AS desired
+                        WHERE current.language = desired.language
+                          AND current.level = desired.level
+                          AND current.body = desired.body
+                    ),
+                    enabled = 1
+                WHERE EXISTS (
+                    SELECT 1
+                    FROM desired_reading_texts AS desired
+                    WHERE current.language = desired.language
+                      AND current.level = desired.level
+                      AND current.body = desired.body
+                )
+                """
+            )
+            connection.execute(
+                """
+                UPDATE reading_texts AS current
+                SET enabled = 0
+                WHERE current.enabled = 1
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM desired_reading_texts AS desired
+                      WHERE current.language = desired.language
+                        AND current.level = desired.level
+                        AND current.body = desired.body
+                  )
+                """
+            )
+            connection.commit()
+            return CatalogSyncResult(
+                inserted=inserted,
+                reenabled=reenabled,
+                updated=updated,
+                disabled=disabled,
+            )
+        except Exception:
+            connection.rollback()
+            raise
         finally:
             connection.close()
 

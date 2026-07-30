@@ -70,8 +70,8 @@ Catalog choices are available in both languages:
 - **English Beginner**, **English Intermediate**, or **English Advanced**
 
 The shared catalog is bundled with the bot from the community reading-text
-document, so choosing a passage does not open Google Docs or require an external
-link.
+collection, so choosing a passage does not open Google Drive or require an
+external link.
 
 Within one room session, the bot does not give the same catalog passage to the
 same reader twice. Each reader has independent history, so another reader may
@@ -297,9 +297,9 @@ El catálogo ofrece tres niveles en ambos idiomas:
 - **Español Principiante**, **Español Intermedio** o **Español Avanzado**
 - **English Beginner**, **English Intermediate** o **English Advanced**
 
-El catálogo compartido está incluido dentro del bot a partir del documento
-comunitario de textos; elegir un texto no abre Google Docs ni requiere un enlace
-externo.
+El catálogo compartido está incluido dentro del bot a partir de la colección
+comunitaria de textos; elegir un texto no abre Google Drive ni requiere un
+enlace externo.
 
 Durante una sesión de sala, el bot no entrega dos veces el mismo texto del
 catálogo al mismo lector. Cada lector tiene un historial independiente, así que

@@ -14,7 +14,7 @@ tracks reading statistics across multiple voice/text channel pairs.
 - Bilingual queue and reading controls
 - Voice-channel validation and automatic queue cleanup
 - Beginner, Intermediate, and Advanced text selection
-- Offline catalog of 1,014 English and Spanish passages
+- Offline catalog of 1,936 English and Spanish passages
 - Custom texts for English, Spanish, and other languages
 - Pronunciation corrections submitted through a modal or message reply
 - Exact and conservative fuzzy highlighting of corrected words
@@ -110,25 +110,31 @@ synchronizes its application commands during startup.
 LecturaBot uses a packaged catalog and does not contact Google Docs while
 running.
 
-- `src/lecturabot/data/google_doc_readings.json` contains 1,014 generated
-  English and Spanish passages.
-- `src/lecturabot/data/retired_readings.json` identifies passages that should
-  remain unavailable.
-- `sources/google_doc_readings.txt` is the committed plain-text source export.
+- `src/lecturabot/data/catalog.json` is the generated runtime catalog.
+- `sources/expanded_spreadsheet_readings.json` is a deterministic snapshot of
+  the expanded community spreadsheet.
+- `sources/legacy_catalog_2026-07-11.json` preserves complete passages that are
+  missing or truncated in the spreadsheet.
+- `sources/legacy_retired_readings_2026-07-20.json` prevents previously retired
+  passages from being reintroduced.
+- `sources/catalog_build_report.json` records source hashes, reconciliation
+  counts, held-language inventory, and the generated catalog hash.
 
-The source categories map to Discord's three reading levels as follows:
-
-| Source category | LecturaBot level |
-| --- | --- |
-| Easy | Beginner |
-| Medium | Intermediate |
-| Hard, Super Hard, and SFW Halloween | Advanced |
+Equivalent and near-equivalent passages use the newer spreadsheet wording.
+The build retains the fuller or corrected legacy wording only for explicitly
+reviewed non-equivalent cases. French and Portuguese entries are preserved in
+the source inventory but are not activated until the picker and level model
+support them completely.
 
 Verify that the generated catalog matches its source:
 
 ```bash
-python scripts/build_google_doc_catalog.py --check
+python scripts/build_catalog.py --check
 ```
+
+At startup, the packaged catalog is authoritative: current passages are
+inserted or re-enabled, and database rows absent from the catalog are disabled
+but retained as history.
 
 ## Testing
 
@@ -156,14 +162,18 @@ src/lecturabot/
   views.py        Persistent controls and input modals
 
 src/lecturabot/data/
-  google_doc_readings.json
-  retired_readings.json
+  catalog.json
 
 scripts/
-  build_google_doc_catalog.py
+  build_catalog.py
+  extract_spreadsheet_catalog.py
 
 sources/
+  catalog_build_report.json
+  expanded_spreadsheet_readings.json
   google_doc_readings.txt
+  legacy_catalog_2026-07-11.json
+  legacy_retired_readings_2026-07-20.json
 ```
 
 ## Operational notes

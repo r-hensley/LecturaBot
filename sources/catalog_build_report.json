@@ -1,0 +1,109 @@
+{
+  "schema_version": 1,
+  "inputs": {
+    "spreadsheet_snapshot": {
+      "path": "sources/expanded_spreadsheet_readings.json",
+      "sha256": "06bf750671677969947b6a17df0c6652cce1c611b176da829eeab90137d72ff7"
+    },
+    "legacy_snapshot": {
+      "path": "sources/legacy_catalog_2026-07-11.json",
+      "sha256": "d415285de53393c19f9ea4984e727d401e5f6b4110d12c7b235ac2c7b354d9eb"
+    },
+    "retired_snapshot": {
+      "path": "sources/legacy_retired_readings_2026-07-20.json",
+      "sha256": "4c192a316e8af69910d2bd68dbd593567a8c9985b170de1fcf699d58c4ed4d2b"
+    }
+  },
+  "spreadsheet": {
+    "rows": 2083,
+    "active_language_rows": 1811,
+    "held_language_rows": 272,
+    "held_counts": [
+      {
+        "language": "fr",
+        "level": "advanced",
+        "count": 4
+      },
+      {
+        "language": "fr",
+        "level": "beginner",
+        "count": 16
+      },
+      {
+        "language": "fr",
+        "level": "intermediate",
+        "count": 17
+      },
+      {
+        "language": "pt",
+        "level": null,
+        "count": 235
+      }
+    ],
+    "duplicate_rows_removed": 13,
+    "duplicate_refs_removed": [
+      "ENGLISH ADVANCED!A241",
+      "ENGLISH ADVANCED!A242",
+      "ENGLISH ADVANCED!A243",
+      "ENGLISH ADVANCED!A244",
+      "ENGLISH ADVANCED!A245",
+      "ENGLISH ADVANCED!A246",
+      "ENGLISH ADVANCED!A247",
+      "ENGLISH ADVANCED!A283",
+      "ENGLISH ADVANCED!A284",
+      "ENGLISH ADVANCED!A285",
+      "ENGLISH ADVANCED!A286",
+      "SPANISH ADVANCED!A103",
+      "SPANISH INTERMEDIATE!A254"
+    ],
+    "compound_cells_split": 2,
+    "compound_readings_created": 7,
+    "expected_emotions_extracted": 301
+  },
+  "legacy_reconciliation": {
+    "readings": 1014,
+    "equivalent": 820,
+    "reviewed_variants": 50,
+    "compound_parts": 7,
+    "fuller_legacy_replacements": 4,
+    "legacy_only": 133,
+    "historically_retired": 13
+  },
+  "active_catalog": {
+    "readings": 1936,
+    "counts": [
+      {
+        "language": "en",
+        "level": "advanced",
+        "count": 367
+      },
+      {
+        "language": "en",
+        "level": "beginner",
+        "count": 322
+      },
+      {
+        "language": "en",
+        "level": "intermediate",
+        "count": 396
+      },
+      {
+        "language": "es",
+        "level": "advanced",
+        "count": 249
+      },
+      {
+        "language": "es",
+        "level": "beginner",
+        "count": 179
+      },
+      {
+        "language": "es",
+        "level": "intermediate",
+        "count": 423
+      }
+    ],
+    "maximum_body_length": 1828,
+    "sha256": "0359e83cd5a01371a39d1803b248d548db78ba93279ca3c31056bfce60f7f59e"
+  }
+}

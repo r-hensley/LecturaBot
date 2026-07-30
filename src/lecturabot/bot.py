@@ -17,8 +17,7 @@ from .views import QueueView, ReadingView, TextPickerView
 
 
 LOGGER = logging.getLogger(__name__)
-CATALOG_SEED_RESOURCES = ("data/google_doc_readings.json",)
-CATALOG_RETIREMENT_RESOURCES = ("data/retired_readings.json",)
+CATALOG_RESOURCE = "data/catalog.json"
 
 
 class LecturaCog(commands.Cog):
@@ -85,24 +84,20 @@ class LecturaBot(commands.Bot):
 
     async def setup_hook(self) -> None:
         await self.repository.initialize()
-        inserted = 0
-        for resource_name in CATALOG_SEED_RESOURCES:
-            seed_resource = resources.files("lecturabot").joinpath(resource_name)
-            # ``as_file`` also supports packaged resources that are not
-            # represented by a normal filesystem path.
-            with resources.as_file(seed_resource) as seed_path:
-                inserted += await self.repository.seed_texts(seed_path)
-        disabled = 0
-        for resource_name in CATALOG_RETIREMENT_RESOURCES:
-            retirement_resource = resources.files("lecturabot").joinpath(
-                resource_name
-            )
-            with resources.as_file(retirement_resource) as retirement_path:
-                disabled += await self.repository.disable_texts(retirement_path)
+        catalog_resource = resources.files("lecturabot").joinpath(
+            CATALOG_RESOURCE
+        )
+        # ``as_file`` also supports packaged resources that are not
+        # represented by a normal filesystem path.
+        with resources.as_file(catalog_resource) as catalog_path:
+            sync = await self.repository.sync_texts(catalog_path)
         LOGGER.info(
-            "reading catalog ready; inserted %s seed texts; disabled %s retired texts",
-            inserted,
-            disabled,
+            "reading catalog ready; inserted %s, re-enabled %s, "
+            "updated %s, disabled %s",
+            sync.inserted,
+            sync.reenabled,
+            sync.updated,
+            sync.disabled,
         )
         await self.service.initialize()
 
