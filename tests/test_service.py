@@ -1579,8 +1579,11 @@ async def test_unmatched_corrections_are_saved_and_duplicates_still_rejected(
         source=CorrectionSource.BUTTON,
     )
     assert accepted.state.active_reading is not None
-    accepted_group = accepted.state.active_reading.correction_groups[1]
-    assert [entry.text for entry in accepted_group.entries] == ["New York"]
+    accepted_group = accepted.state.active_reading.correction_groups[0]
+    assert [entry.text for entry in accepted_group.entries] == [
+        "Boston",
+        "New York",
+    ]
 
     with pytest.raises(SessionError) as repeated_existing:
         await service.add_corrections(
