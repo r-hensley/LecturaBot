@@ -126,6 +126,21 @@ def test_correction_parser_splits_top_level_commas_and_newlines() -> None:
     ]
 
 
+@pytest.mark.parametrize(
+    ("raw_value", "expected"),
+    [
+        ("vegetables,looking,baked", ["vegetables", "looking", "baked"]),
+        ("vegetables,looking,baked,", ["vegetables", "looking", "baked"]),
+        ("vegetables\nlooking\nbaked", ["vegetables", "looking", "baked"]),
+    ],
+)
+def test_correction_parser_accepts_common_delimiter_variations(
+    raw_value: str,
+    expected: list[str],
+) -> None:
+    assert parse_correction_lines(raw_value) == expected
+
+
 async def _prepare_custom_reading(
     tmp_path: Path,
     *,
@@ -1398,6 +1413,34 @@ async def test_screenshot_comma_reply_entries_are_all_accepted(
         "baked",
         "performances",
         "variety",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_repeated_first_correction_does_not_drop_later_items(
+    tmp_path: Path,
+) -> None:
+    service, _ = await _prepare_custom_reading(
+        tmp_path,
+        language=Language.ENGLISH,
+        body="The vegetables look colorful beside the baked goods.",
+    )
+
+    accepted = await service.add_corrections(
+        text_channel_id=101,
+        reading_message_id=700,
+        corrector_id=20,
+        corrector_display_name="Reader 20",
+        items=parse_correction_lines("vegetables,vegetables,look,baked"),
+        source=CorrectionSource.REPLY,
+    )
+
+    assert accepted.state.active_reading is not None
+    entries = accepted.state.active_reading.correction_groups[0].entries
+    assert [entry.text for entry in entries] == [
+        "vegetables",
+        "look",
+        "baked",
     ]
 
 

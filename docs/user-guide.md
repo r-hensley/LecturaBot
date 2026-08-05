@@ -160,7 +160,9 @@ annotation remains regular rather than being struck through. Duplicate base
 words are compared case-insensitively even when they cannot be highlighted in
 the reading. A corrector may submit the same base again with a changed comment;
 the new entry is listed with its duplicate base struck through, while submitting
-the same full correction twice is still rejected.
+the same full correction again in a later submission is still rejected. If a
+word is accidentally repeated within one submission, the bot keeps its first
+occurrence and continues saving the other corrections.
 
 Please submit corrections only when the reader is practicing your native
 language. This is a community rule even though the bot does not currently

@@ -758,34 +758,64 @@ class SessionService:
         items: list[str],
         source: CorrectionSource,
     ) -> list[str | None]:
+        """Validate and append one corrector's submitted correction items.
+
+        ``reading`` is the active reading being updated. ``corrector_id`` and
+        ``corrector_display_name`` identify the submitting user. ``items`` is
+        the parsed, ordered correction text, and ``source`` records whether it
+        came from the correction button or a message reply. The returned list
+        contains the source-text match for each saved item, or ``None`` when an
+        item could not be highlighted.
+        """
+        # Ignore accidental repeats within this submission while preserving the
+        # first spelling and the order of all remaining corrections.
+        # unique_items is the ordered list that will actually be matched/saved.
+        unique_items: list[str] = []
+        # seen_in_submission stores normalized comparison keys already found in
+        # this message, allowing case/spacing-equivalent repeats to be skipped.
+        seen_in_submission: set[str] = set()
+        for item in items:
+            # normalized is a stable comparison key; item retains the user's
+            # original spelling and formatting for display.
+            normalized = reading._normalize_correction(item)
+            if normalized in seen_in_submission:
+                continue
+            seen_in_submission.add(normalized)
+            unique_items.append(item)
+
+        # match_texts stays index-aligned with unique_items and contains the
+        # exact reading text to highlight, or None for an unmatched correction.
         match_texts = [
             find_correction_target(
                 reading.body,
                 item,
                 language=reading.language.value,
             )
-            for item in items
+            for item in unique_items
         ]
-        seen_in_submission: set[str] = set()
+
+        # A correction submitted by this user in an earlier message remains an
+        # error; only duplicates within the current message are ignored above.
+        # seen_by_corrector holds normalized keys from that user's prior groups.
         seen_by_corrector = {
             reading._normalize_correction(entry.text)
             for group in reading.correction_groups
             if group.user_id == corrector_id
             for entry in group.entries
         }
-        for item in items:
+        for item in unique_items:
+            # Recompute the item's comparison key for the prior-submission check.
             normalized = reading._normalize_correction(item)
-            if normalized in seen_in_submission or normalized in seen_by_corrector:
+            if normalized in seen_by_corrector:
                 raise SessionError(
                     "duplicate_correction",
                     "Esa corrección ya fue enviada por ti. / "
                     "You already submitted that correction.",
                 )
-            seen_in_submission.add(normalized)
         reading.add_corrections(
             corrector_id=corrector_id,
             corrector_display_name=corrector_display_name,
-            items=items,
+            items=unique_items,
             source=source,
             match_texts=match_texts,
         )
