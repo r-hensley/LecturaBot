@@ -1570,25 +1570,17 @@ async def test_unmatched_corrections_are_saved_and_duplicates_still_rejected(
         )
     _assert_error(repeated_unmatched, "duplicate_correction")
 
-    with pytest.raises(SessionError) as repeated_submission:
-        await service.add_corrections(
-            text_channel_id=101,
-            reading_message_id=700,
-            corrector_id=20,
-            corrector_display_name="Reader 20",
-            items=["New York", "new   york"],
-            source=CorrectionSource.BUTTON,
-        )
-    _assert_error(repeated_submission, "duplicate_correction")
-
     accepted = await service.add_corrections(
         text_channel_id=101,
         reading_message_id=700,
         corrector_id=20,
         corrector_display_name="Reader 20",
-        items=["New York"],
+        items=["New York", "new   york"],
         source=CorrectionSource.BUTTON,
     )
+    assert accepted.state.active_reading is not None
+    accepted_group = accepted.state.active_reading.correction_groups[1]
+    assert [entry.text for entry in accepted_group.entries] == ["New York"]
 
     with pytest.raises(SessionError) as repeated_existing:
         await service.add_corrections(
