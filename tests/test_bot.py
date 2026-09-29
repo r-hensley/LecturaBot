@@ -11,7 +11,7 @@ from lecturabot.config import BotConfig
 
 
 @pytest.mark.asyncio
-async def test_message_content_disabled_with_other_required_intents_retained(
+async def test_privileged_intents_disabled_with_voice_and_message_events_retained(
     tmp_path: Path,
 ) -> None:
     bot = LecturaBot(
@@ -28,9 +28,11 @@ async def test_message_content_disabled_with_other_required_intents_retained(
         assert bot.intents.message_content is False
         assert bot.intents.guilds is True
         assert bot.intents.messages is True
-        assert bot.intents.members is True
+        assert bot.intents.members is False
         assert bot.intents.voice_states is True
         assert bot.intents.presences is False
+        assert bot._connection.member_cache_flags.value == 0
+        assert bot._connection._chunk_guilds is False
     finally:
         await bot.close()
 

@@ -665,24 +665,34 @@ class LecturaController:
     async def reconcile_voice_membership(self) -> bool:
         """Remove persisted queue entries that are no longer in paired voice."""
         guild = self.bot.get_guild(self.config.guild_id)
-        if guild is None:
+        if guild is None or guild.unavailable:
             return False
+        complete = True
         for pair in self.config.channel_pairs:
             state = await self.service.get_session(pair.text_channel_id)
+            if (
+                guild.unavailable
+                or self.bot.get_guild(self.config.guild_id) is not guild
+            ):
+                return False
             if state is None:
                 continue
-            absent_user_ids: list[int] = []
-            for user_id in state.queue:
-                member = guild.get_member(user_id)
-                current_voice_id = (
-                    None
-                    if member is None
-                    or member.voice is None
-                    or member.voice.channel is None
-                    else member.voice.channel.id
+            channel = guild.get_channel(pair.voice_channel_id)
+            if not isinstance(channel, (discord.VoiceChannel, discord.StageChannel)):
+                LOGGER.warning(
+                    "cannot reconcile voice membership for %s: "
+                    "voice channel %s is unavailable",
+                    pair.name,
+                    pair.voice_channel_id,
                 )
-                if current_voice_id != pair.voice_channel_id:
-                    absent_user_ids.append(user_id)
+                complete = False
+                continue
+            # Voice-state IDs are available without Server Members intent or
+            # a member cache; missing Member objects do not imply absence.
+            connected_ids = channel.voice_states
+            absent_user_ids = [
+                user_id for user_id in state.queue if user_id not in connected_ids
+            ]
 
             # Remove waiting participants first. If the current reader is also
             # absent, removing them last avoids transiently activating and
@@ -690,19 +700,20 @@ class LecturaController:
             current_id = state.current_user_id
             absent_user_ids.sort(key=lambda user_id: user_id == current_id)
             for user_id in absent_user_ids:
-                member = guild.get_member(user_id)
+                # Earlier removals await Discord/SQLite; the next user may
+                # have rejoined in the meantime. Read current voice states.
                 if (
-                    member is not None
-                    and member.voice is not None
-                    and member.voice.channel is not None
-                    and member.voice.channel.id == pair.voice_channel_id
+                    guild.unavailable
+                    or self.bot.get_guild(self.config.guild_id) is not guild
                 ):
+                    return False
+                if user_id in channel.voice_states:
                     continue
                 await self.handle_voice_departure(
-                    member or discord.Object(id=user_id),
+                    discord.Object(id=user_id),
                     pair.voice_channel_id,
                 )
-        return True
+        return complete
 
     async def reconcile_session_messages(self) -> bool:
         """Restore canonical panels and active controls after a restart."""

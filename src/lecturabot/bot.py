@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from importlib import resources
 
@@ -66,7 +67,7 @@ class LecturaBot(commands.Bot):
     def __init__(self, config: BotConfig) -> None:
         intents = discord.Intents.none()
         intents.guilds = True
-        intents.members = True
+        intents.members = False
         intents.voice_states = True
         # Correction replies use Discord's bot-mention exception; forms use
         # interactions. Keep message events without requesting broad content.
@@ -76,6 +77,8 @@ class LecturaBot(commands.Bot):
         super().__init__(
             command_prefix=commands.when_mentioned,
             intents=intents,
+            member_cache_flags=discord.MemberCacheFlags.none(),
+            chunk_guilds_at_startup=False,
             allowed_mentions=discord.AllowedMentions.none(),
         )
         self.config = config
@@ -83,6 +86,7 @@ class LecturaBot(commands.Bot):
         self.service = SessionService(self.repository)
         self.controller = LecturaController(self, config, self.service)
         self._reconciled = False
+        self._reconcile_lock = asyncio.Lock()
 
     async def setup_hook(self) -> None:
         await self.repository.initialize()
@@ -134,7 +138,23 @@ class LecturaBot(commands.Bot):
         if self.user is None:
             return
         LOGGER.info("connected as %s (%s)", self.user, self.user.id)
-        if not self._reconciled:
+        await self._reconcile_startup()
+
+    async def on_guild_available(self, guild: discord.Guild) -> None:
+        if guild.id == self.config.guild_id and self.is_ready():
+            await self._reconcile_startup()
+
+    async def on_guild_unavailable(self, guild: discord.Guild) -> None:
+        if guild.id == self.config.guild_id:
+            async with self._reconcile_lock:
+                self._reconciled = False
+
+    async def _reconcile_startup(self) -> None:
+        # Discord may deliver guild availability after READY. Serialize both
+        # callbacks so they cannot restore/advance the same session twice.
+        async with self._reconcile_lock:
+            if self._reconciled:
+                return
             voice_ready = await self.controller.reconcile_voice_membership()
             controls_ready = (
                 await self.controller.reconcile_session_messages()

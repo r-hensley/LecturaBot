@@ -43,15 +43,19 @@ tracks reading statistics across multiple voice/text channel pairs.
   - Embed Links
   - Read Message History
   - Use Application Commands
-- Server Members Intent enabled in the Discord Developer Portal
 
-Leave Message Content Intent disabled in the Discord Developer Portal. The bot
-receives message events with that privileged intent disabled. For correction
-replies, users must reply to the active reading message with **ping on reply
-enabled**, or explicitly mention the current bot in that same reply. A mention
-without a reply does not submit corrections. Corrections and custom reading
-passages submitted through the buttons and popup forms do not depend on Message
-Content Intent.
+No privileged intents are required. Leave **Server Members Intent**, **Message
+Content Intent**, and **Presence Intent** disabled in the Discord Developer
+Portal. The code enables the standard guild, message, and voice-state events.
+Voice-channel checks and automatic queue cleanup on voice departure remain
+active. Startup recovery uses the user IDs in the current voice states instead
+of relying on a complete server member cache.
+
+For correction replies, users must reply to the active reading message with
+**ping on reply enabled**, or explicitly mention the current bot in that same
+reply. A mention without a reply does not submit corrections. Corrections and
+custom reading passages submitted through the buttons and popup forms do not
+depend on Message Content Intent.
 
 ## Installation
 
