@@ -35,6 +35,7 @@ tracks reading statistics across multiple voice/text channel pairs.
 ## Requirements
 
 - Python 3.12 or newer
+- [uv](https://docs.astral.sh/uv/getting-started/installation/) for dependency management
 - A Discord application with a bot token
 - The `bot` and `applications.commands` OAuth scopes
 - The following channel permissions:
@@ -59,12 +60,18 @@ depend on Message Content Intent.
 
 ## Installation
 
-From an activated Python 3.12+ virtual environment, install the project in
-editable mode:
+From the repository root, install the locked runtime dependencies and activate
+the virtual environment:
 
 ```bash
-python -m pip install -e .
+uv sync --locked --no-dev
+source .venv/bin/activate
 ```
+
+uv creates `.venv` and installs the dependencies declared in `pyproject.toml`
+at the exact versions recorded in `uv.lock`. The project is configured so uv
+does not install LecturaBot itself as a package; the top-level launcher loads
+the bot directly from the checkout.
 
 ## Configuration
 
@@ -101,19 +108,22 @@ globally and may take longer to appear.
 
 ## Running the bot
 
-Run from the repository checkout:
+With the virtual environment activated, run from the repository root:
 
 ```bash
-python -m lecturabot
+python lecturabot.py
 ```
 
-The bot initializes its SQLite database, loads the packaged reading catalog,
+By default, the bot reads `config.toml` from the current working directory.
+Set `LECTURABOT_CONFIG` as shown above to use another configuration file.
+
+The bot initializes its SQLite database, loads the bundled reading catalog,
 restores active sessions, registers persistent Discord controls, and
 synchronizes its application commands during startup.
 
 ## Reading catalog
 
-LecturaBot uses a packaged catalog and does not contact Google Docs while
+LecturaBot uses a bundled catalog and does not contact Google Docs while
 running.
 
 - `src/lecturabot/data/catalog.json` is the generated runtime catalog.
@@ -138,16 +148,18 @@ Verify that the generated catalog matches its source:
 python scripts/build_catalog.py --check
 ```
 
-At startup, the packaged catalog is authoritative: current passages are
+At startup, the bundled catalog is authoritative: current passages are
 inserted or re-enabled, and database rows absent from the catalog are disabled
 but retained as history.
 
 ## Testing
 
-Run the offline test suite:
+Install the locked runtime and test dependencies, then run the offline test
+suite from the repository root:
 
 ```bash
-python -m pytest
+uv sync --locked
+uv run --locked python -m pytest
 ```
 
 The tests cover configuration, session state transitions, persistence,
@@ -157,6 +169,10 @@ connecting to Discord.
 ## Project structure
 
 ```text
+lecturabot.py      Launcher for running directly from the checkout
+pyproject.toml    Runtime and development dependency declarations
+uv.lock           Locked dependency versions
+
 src/lecturabot/
   bot.py          Discord bot, commands, and gateway listeners
   config.py       TOML and environment configuration
