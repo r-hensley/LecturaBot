@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
+import discord
 import pytest
 
 from lecturabot.config import BotConfig, ChannelPairConfig
@@ -20,6 +22,9 @@ from lecturabot.models import (
 from lecturabot.rendering import CorrectionSummaryOverflow
 from lecturabot.service import SessionError, Transition
 from lecturabot.views import QueueView, ReadingView
+
+
+BOT_USER_ID = 1234567890123456789
 
 
 class _FakeMessage:
@@ -154,8 +159,9 @@ def _controller(
         database_path=Path("test.sqlite3"),
         channel_pairs=channel_pairs,
     )
+    bot = SimpleNamespace(user=SimpleNamespace(id=BOT_USER_ID))
     return LecturaController(
-        bot=object(),  # type: ignore[arg-type]
+        bot=bot,  # type: ignore[arg-type]
         config=config,
         service=service,  # type: ignore[arg-type]
     )
@@ -175,9 +181,12 @@ class _CorrectionService:
         self.find_calls: list[int] = []
         self.add_calls: list[dict[str, Any]] = []
 
-    async def find_by_reading_message(self, message_id: int) -> SessionState:
+    async def find_by_reading_message(self, message_id: int) -> SessionState | None:
         self.find_calls.append(message_id)
-        return self.state
+        reading = self.state.active_reading
+        if reading is not None and reading.message_id == message_id:
+            return self.state
+        return None
 
     async def add_corrections(self, **kwargs: Any) -> Transition:
         self.add_calls.append(kwargs)
@@ -248,6 +257,10 @@ class _ReplyMessage:
         self.reference = type("Reference", (), {"message_id": 700})()
         self.guild = type("Guild", (), {"id": 1})()
         self.channel = type("Channel", (), {"id": 101})()
+        self.reply_calls: list[tuple[str, dict[str, Any]]] = []
+
+    async def reply(self, content: str, **kwargs: Any) -> None:
+        self.reply_calls.append((content, kwargs))
 
 
 class _ModalInteraction:
@@ -648,10 +661,15 @@ async def test_correction_rollover_repairs_failed_continuation_activation() -> N
     assert isinstance(new_message.edit_calls[-1]["view"], ReadingView)
 
 
-@pytest.mark.asyncio
-async def test_reply_to_reading_submits_corrections_and_refreshes_message(
+_CorrectionReplyContext = tuple[
+    LecturaController, _CorrectionService, _ReplyMessage, list[SessionState]
+]
+
+
+@pytest.fixture
+def correction_reply_context(
     monkeypatch: pytest.MonkeyPatch,
-) -> None:
+) -> _CorrectionReplyContext:
     state = _reading_state()
     service = _CorrectionService(state)
     pair = ChannelPairConfig(
@@ -661,9 +679,6 @@ async def test_reply_to_reading_submits_corrections_and_refreshes_message(
         mode=ChannelMode.STANDARD,
     )
     controller = _controller(service, channel_pairs=(pair,))
-    controller._require_matching_voice = (  # type: ignore[method-assign]
-        lambda _member, _pair: None
-    )
     refreshed: list[SessionState] = []
 
     async def refresh(refreshed_state: SessionState) -> bool:
@@ -672,10 +687,48 @@ async def test_reply_to_reading_submits_corrections_and_refreshes_message(
 
     controller._refresh_reading = refresh  # type: ignore[method-assign]
     monkeypatch.setattr("lecturabot.controller.discord.Member", _ReplyMember)
-    reply = _ReplyMessage(
-        _ReplyMember(20, "Listener"),
-        "produce (noun), (stress, keep trying :peepoPray:),",
-    )
+    member = _ReplyMember(20, "Listener")
+    member.voice = SimpleNamespace(channel=SimpleNamespace(id=201))
+    reply = _ReplyMessage(member, "")
+    return controller, service, reply, refreshed
+
+
+@pytest.mark.parametrize(
+    ("content", "expected_items"),
+    [
+        (
+            "produce (noun), (stress, keep trying :peepoPray:),",
+            ["produce (noun)", "(stress, keep trying :peepoPray:)"],
+        ),
+        (f"<@{BOT_USER_ID}> apple", ["apple"]),
+        (f"apple <@!{BOT_USER_ID}>", ["apple"]),
+        (
+            f"<@{BOT_USER_ID}>an<@!{BOT_USER_ID}>apple<@{BOT_USER_ID}>",
+            ["an apple"],
+        ),
+        (f"<@{BOT_USER_ID}> " + "a" * 100, ["a" * 100]),
+        (
+            f"<@{BOT_USER_ID}> apple (<@42>, <@!43>, <@&44>)",
+            ["apple (<@42>, <@!43>, <@&44>)"],
+        ),
+    ],
+    ids=[
+        "reply-ping",
+        "mention",
+        "nickname-mention",
+        "adjacent-mentions",
+        "length-limit",
+        "other-mentions",
+    ],
+)
+@pytest.mark.asyncio
+async def test_reply_to_reading_submits_corrections_and_refreshes_message(
+    correction_reply_context: _CorrectionReplyContext,
+    content: str,
+    expected_items: list[str],
+) -> None:
+    controller, service, reply, refreshed = correction_reply_context
+    reply.content = content
 
     await controller.handle_reply(reply)  # type: ignore[arg-type]
 
@@ -684,12 +737,96 @@ async def test_reply_to_reading_submits_corrections_and_refreshes_message(
     assert service.add_calls[0]["text_channel_id"] == 101
     assert service.add_calls[0]["reading_message_id"] == 700
     assert service.add_calls[0]["corrector_id"] == 20
-    assert service.add_calls[0]["items"] == [
-        "produce (noun)",
-        "(stress, keep trying :peepoPray:)",
-    ]
+    assert service.add_calls[0]["items"] == expected_items
     assert service.add_calls[0]["source"] is CorrectionSource.REPLY
-    assert refreshed == [state]
+    assert refreshed == [service.state]
+    assert reply.reply_calls == []
+
+
+@pytest.mark.parametrize(
+    "content",
+    ["", " \n ", f"<@{BOT_USER_ID}>", f"<@!{BOT_USER_ID}> <@{BOT_USER_ID}>"],
+    ids=["redacted", "whitespace", "mention-only", "multiple-mentions-only"],
+)
+@pytest.mark.asyncio
+async def test_unreadable_or_empty_reply_gets_guidance_without_saving(
+    correction_reply_context: _CorrectionReplyContext,
+    content: str,
+) -> None:
+    controller, service, reply, refreshed = correction_reply_context
+    reply.content = content
+
+    await controller.handle_reply(reply)  # type: ignore[arg-type]
+
+    assert service.add_calls == []
+    assert refreshed == []
+    assert len(reply.reply_calls) == 1
+    guidance, kwargs = reply.reply_calls[0]
+    assert "correction" in guidance.lower()
+    assert "correcci" in guidance.lower()
+    assert "ON" in guidance
+    assert kwargs["mention_author"] is False
+    assert (
+        kwargs["allowed_mentions"].to_dict()
+        == discord.AllowedMentions.none().to_dict()
+    )
+
+
+@pytest.mark.parametrize("content", ["", "apple"], ids=["redacted", "visible"])
+@pytest.mark.parametrize(
+    "ineligible",
+    [
+        "not-a-reply",
+        "stale-reply",
+        "bot",
+        "reader",
+        "wrong-channel",
+        "wrong-guild",
+        "wrong-voice",
+    ],
+)
+@pytest.mark.asyncio
+async def test_ineligible_reply_gets_neither_guidance_nor_correction(
+    correction_reply_context: _CorrectionReplyContext,
+    ineligible: str,
+    content: str,
+) -> None:
+    controller, service, reply, refreshed = correction_reply_context
+    reply.content = content
+    if ineligible == "not-a-reply":
+        reply.reference = None
+    elif ineligible == "stale-reply":
+        reply.reference.message_id = 699
+    elif ineligible == "bot":
+        reply.author.bot = True
+    elif ineligible == "reader":
+        reply.author.id = 10
+    elif ineligible == "wrong-channel":
+        reply.channel.id = 102
+    elif ineligible == "wrong-guild":
+        reply.guild.id = 2
+    elif ineligible == "wrong-voice":
+        reply.author.voice.channel.id = 202
+
+    await controller.handle_reply(reply)  # type: ignore[arg-type]
+
+    assert service.add_calls == []
+    assert refreshed == []
+    assert reply.reply_calls == []
+
+
+@pytest.mark.asyncio
+async def test_reply_without_authenticated_bot_identity_keeps_message_text(
+    correction_reply_context: _CorrectionReplyContext,
+) -> None:
+    controller, service, reply, refreshed = correction_reply_context
+    controller.bot.user = None
+    reply.content = f"apple (<@{BOT_USER_ID}>)"
+
+    await controller.handle_reply(reply)  # type: ignore[arg-type]
+
+    assert service.add_calls[0]["items"] == [reply.content]
+    assert refreshed == [service.state]
 
 
 @pytest.mark.asyncio

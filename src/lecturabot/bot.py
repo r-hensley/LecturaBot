@@ -68,7 +68,9 @@ class LecturaBot(commands.Bot):
         intents.guilds = True
         intents.members = True
         intents.voice_states = True
-        intents.message_content = True
+        # Correction replies use Discord's bot-mention exception; forms use
+        # interactions. Keep message events without requesting broad content.
+        intents.message_content = False
         intents.messages = True
 
         super().__init__(

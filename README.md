@@ -43,13 +43,15 @@ tracks reading statistics across multiple voice/text channel pairs.
   - Embed Links
   - Read Message History
   - Use Application Commands
-- The following gateway intents enabled in the Discord Developer Portal:
-  - Server Members Intent
-  - Message Content Intent
+- Server Members Intent enabled in the Discord Developer Portal
 
-Message Content Intent is required for corrections submitted as replies.
-Corrections submitted through the button and modal do not depend on message
-content access.
+Leave Message Content Intent disabled in the Discord Developer Portal. The bot
+receives message events with that privileged intent disabled. For correction
+replies, users must reply to the active reading message with **ping on reply
+enabled**, or explicitly mention the current bot in that same reply. A mention
+without a reply does not submit corrections. Corrections and custom reading
+passages submitted through the buttons and popup forms do not depend on Message
+Content Intent.
 
 ## Installation
 

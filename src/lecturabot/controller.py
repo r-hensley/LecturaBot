@@ -474,8 +474,34 @@ class LecturaController:
         state = await self.service.find_by_reading_message(referenced_id)
         if state is None or state.text_channel_id != message.channel.id:
             return
+        reading = state.active_reading
+        if reading is None or reading.reader_id == message.author.id:
+            return
         try:
-            items = parse_correction_lines(message.content)
+            content = message.content
+            bot_user = self.bot.user
+            if bot_user is not None:
+                # An explicit mention grants content access, but isn't itself
+                # a correction. A reply ping doesn't add text to the content.
+                for mention in (f"<@{bot_user.id}>", f"<@!{bot_user.id}>"):
+                    content = content.replace(mention, " ")
+            if not content.strip():
+                await message.reply(
+                    "No pude leer ninguna corrección en tu respuesta. "
+                    "Responde de nuevo al mensaje de lectura con la mención "
+                    "al responder activada (@ ON), o mencióname explícitamente, "
+                    "e incluye tus correcciones. También puedes usar el botón "
+                    "**Poner Correcciones / Submit Corrections**.\n"
+                    "I couldn't read any correction text in your reply. "
+                    "Reply to the reading message again with ping on reply "
+                    "enabled (@ ON), or explicitly @mention me, and include "
+                    "your corrections. You can also use the "
+                    "**Poner Correcciones / Submit Corrections** button.",
+                    allowed_mentions=discord.AllowedMentions.none(),
+                    mention_author=False,
+                )
+                return
+            items = parse_correction_lines(content)
             async with self._ui_lock_for(state.text_channel_id):
                 await self._add_corrections_with_rollover(
                     text_channel_id=state.text_channel_id,

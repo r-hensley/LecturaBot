@@ -114,8 +114,18 @@ Use either method:
 
 1. Click **Poner Correcciones / Submit Corrections** on the reading message.
    Separate corrected words or phrases with newlines or commas.
-2. Reply directly to the bot's reading message. Newlines and commas also
-   separate the corrections in your reply.
+2. Reply directly to the bot's active reading message with **ping on reply
+   enabled**, or explicitly @mention the current bot in that same reply.
+   Newlines and commas also separate the corrections in your reply. Mentioning
+   the bot without replying to the active reading message does not submit
+   corrections.
+
+The bot removes its own explicit @mention before reading your corrections, so
+the mention is not saved as a correction. If the bot receives an eligible reply
+with no readable text, it sends a reminder in English and Spanish to enable the
+reply ping, explicitly mention it in your reply, or use **Poner Correcciones /
+Submit Corrections**. The correction form and custom reading form work without
+a mention.
 
 Only commas outside parentheses separate entries. For example,
 `vegetables, produce (noun), baked` is three corrections, while a comma inside
@@ -230,6 +240,7 @@ itself at the expiry time.
 | You already voted | Your skip vote was recorded and cannot be submitted twice. |
 | An AFK skip does not advance | Three different queued, non-current readers are required; the threshold is not reduced. |
 | A correction continuation appears | Use the newest reading message for additional corrections and turn controls; earlier summaries are frozen history. |
+| The bot cannot read my correction reply | Reply to the active reading message with the reply ping enabled or an explicit @mention of the current bot, or use **Poner Correcciones / Submit Corrections**. |
 | A correction is listed but nothing is highlighted | The bot did not find a clear exact or fuzzy source match. The correction was still saved for the reader to review. |
 | No unused catalog text remains at this level | Choose another level or submit your own text; the bot will not repeat a passage for you in the same room session. |
 | Catalog choices fail in Other Languages | Use **Your own text** and provide the language name. |
@@ -344,8 +355,18 @@ Puedes usar cualquiera de estos métodos:
 
 1. Pulsa **Poner Correcciones / Submit Corrections** en el mensaje de lectura.
    Separa las palabras o frases corregidas con saltos de línea o comas.
-2. Responde directamente al mensaje de lectura del bot. Los saltos de línea y
-   las comas también separan las correcciones de tu respuesta.
+2. Responde directamente al mensaje de lectura activo del bot con **la mención
+   al responder activada**, o menciona explícitamente con @ al bot actual en esa
+   misma respuesta. Los saltos de línea y las comas también separan las
+   correcciones. Mencionar al bot sin responder al mensaje de lectura activo no
+   envía correcciones.
+
+El bot elimina su propia @mención explícita antes de leer tus correcciones, por
+lo que la mención no se guarda como corrección. Si recibe una respuesta válida
+sin texto que pueda leer, envía un recordatorio en español e inglés para que
+actives la mención al responder, lo menciones explícitamente en la respuesta o
+uses **Poner Correcciones / Submit Corrections**. Los formularios de correcciones
+y de texto propio funcionan sin mencionar al bot.
 
 Solo las comas que estén fuera de paréntesis separan entradas. Por ejemplo,
 `vegetables, produce (sustantivo), baked` contiene tres correcciones, mientras
@@ -454,6 +475,7 @@ la ventana.
 | Ya votaste | Tu voto fue registrado y no puedes enviarlo dos veces. |
 | Un salto AFK no avanza | Se necesitan tres lectores distintos que estén en la cola y no sean el lector actual; el requisito no se reduce. |
 | Aparece una continuación de correcciones | Usa el mensaje de lectura más reciente para añadir correcciones y controlar el turno; los resúmenes anteriores quedan congelados. |
+| El bot no puede leer mi respuesta con correcciones | Responde al mensaje de lectura activo con la mención al responder activada o una @mención explícita del bot actual, o usa **Poner Correcciones / Submit Corrections**. |
 | Una corrección aparece en la lista, pero no se destaca nada | El bot no encontró una coincidencia exacta o difusa suficientemente clara. La corrección se guardó igualmente para que el lector pueda revisarla. |
 | No queda ningún texto sin usar en ese nivel | Elige otro nivel o proporciona tu propio texto; el bot no repetirá un texto para ti durante la misma sesión de sala. |
 | Las opciones del catálogo fallan en Other Languages | Usa **Your own text** e indica el nombre del idioma. |
