@@ -56,9 +56,8 @@ class LecturaCog(commands.Cog):
     ) -> None:
         before_id = None if before.channel is None else before.channel.id
         after_id = None if after.channel is None else after.channel.id
-        if before_id is None or before_id == after_id:
-            return
-        await self.controller.handle_voice_departure(member, before_id)
+        if before_id != after_id:
+            await self.controller.handle_voice_change(member, before_id, after_id)
 
 
 class LecturaBot(commands.Bot):

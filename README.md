@@ -201,7 +201,8 @@ sources/
 ## Operational notes
 
 - Active queue panels and reading controls are persisted across restarts.
-- Users who leave the associated voice channel are removed from the queue.
+- Disconnected readers have five minutes to return to the same voice channel.
+  Moving directly to another voice channel removes them immediately.
 - A room session ends when its queue becomes empty.
 - Custom texts apply only to the current turn and are not added to the catalog.
 - Catalog passages do not repeat for the same reader during an active room

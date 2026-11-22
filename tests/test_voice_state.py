@@ -271,6 +271,7 @@ async def test_uncached_voice_event_member_supports_voice_checks_and_departure(
     assert guild.get_member(member.id) is None
     assert before.channel.id == 201
     assert (None if after.channel is None else after.channel.id) == next_channel
+    monkeypatch.setattr("lecturabot.controller.VOICE_GRACE_SECONDS", 0)
     await LecturaCog(bot.controller).on_voice_state_update(member, before, after)
     state = await bot.service.get_session(101)
     assert state is not None
@@ -281,6 +282,33 @@ async def test_uncached_voice_event_member_supports_voice_checks_and_departure(
         with pytest.raises(SessionError, match="matching voice"):
             bot.controller._require_matching_voice(member, pair)
         assert state.queue == []
+
+
+async def test_reconnect_keeps_current_turn_until_a_later_disconnect_expires(
+    bot: LecturaBot, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    guild = _guild(bot, {10: 201, 20: 201})
+    member = discord.Member(state=bot._connection, guild=guild, data=_member_data(10))
+    await _queue(bot, 10, 20, start=True)
+    change = bot.controller.handle_voice_change
+
+    guild._update_voice_state(_voice_data(10, None), None)
+    first_drop = asyncio.create_task(change(member, 201, None))
+    await asyncio.sleep(0)
+    await bot.controller.reconcile_voice_membership()
+    guild._update_voice_state(_voice_data(10, 201), 201)
+    await change(member, None, 201)
+    await first_drop
+
+    state = await bot.service.get_session(101)
+    assert state is not None and state.queue == [10, 20] and state.current_user_id == 10
+    bot.controller._apply_transition.assert_not_awaited()
+
+    monkeypatch.setattr("lecturabot.controller.VOICE_GRACE_SECONDS", 0)
+    guild._update_voice_state(_voice_data(10, None), None)
+    await change(member, 201, None)
+    state = await bot.service.get_session(101)
+    assert state is not None and state.queue == [20] and state.current_user_id == 20
 
 
 async def test_ready_retries_after_target_guild_becomes_available(

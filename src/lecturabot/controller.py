@@ -46,6 +46,7 @@ LEVEL_BY_INDEX = {
     1: Level.INTERMEDIATE,
     2: Level.ADVANCED,
 }
+VOICE_GRACE_SECONDS = 5 * 60
 MAX_CUSTOM_TEXT_LENGTH = 1_600
 CORRECTION_CONTINUATION_PLACEHOLDER = (
     "Preparando continuación de correcciones… / "
@@ -76,6 +77,7 @@ class LecturaController:
         # Service locks protect state commits; these locks extend the critical
         # section through Discord publication so an older snapshot cannot win
         # a race and overwrite a newer queue or correction message.
+        self._reconnects: dict[tuple[int, int], asyncio.Event] = {}
         self._ui_locks: dict[int, asyncio.Lock] = {}
 
     def _ui_lock_for(self, text_channel_id: int) -> asyncio.Lock:
@@ -639,10 +641,36 @@ class LecturaController:
             )
             return False
 
+    async def handle_voice_change(
+        self, member: discord.Member, before_id: int | None, after_id: int | None
+    ) -> None:
+        if after_id is not None:
+            returned = self._reconnects.pop((after_id, member.id), None)
+            if returned is not None:
+                returned.set()
+        if before_id is None or self.config.pair_for_voice_channel(before_id) is None:
+            return
+        if after_id is not None:
+            await self.handle_voice_departure(member, before_id)
+            return
+
+        key = (before_id, member.id)
+        returned = self._reconnects[key] = asyncio.Event()
+        try:
+            await asyncio.wait_for(returned.wait(), VOICE_GRACE_SECONDS)
+        except TimeoutError:
+            await self.handle_voice_departure(member, before_id, returned=returned)
+        finally:
+            # A reconnect and second disconnect may already own a new timer.
+            if self._reconnects.get(key) is returned:
+                del self._reconnects[key]
+
     async def handle_voice_departure(
         self,
         member: discord.Member | discord.Object,
         voice_id: int,
+        *,
+        returned: asyncio.Event | None = None,
     ) -> None:
         pair = self.config.pair_for_voice_channel(voice_id)
         if pair is None:
@@ -652,6 +680,17 @@ class LecturaController:
                 state = await self.service.get_session(pair.text_channel_id)
                 if state is None or member.id not in state.members:
                     return
+                if returned is not None:
+                    guild = self.bot.get_guild(self.config.guild_id)
+                    channel = guild and guild.get_channel(voice_id)
+                    if (
+                        returned.is_set()
+                        or guild is None
+                        or guild.unavailable
+                        or not isinstance(channel, (discord.VoiceChannel, discord.StageChannel))
+                        or member.id in channel.voice_states
+                    ):
+                        return
                 transition = await self.service.leave(
                     text_channel_id=pair.text_channel_id,
                     user_id=member.id,
@@ -707,7 +746,10 @@ class LecturaController:
                     or self.bot.get_guild(self.config.guild_id) is not guild
                 ):
                     return False
-                if user_id in channel.voice_states:
+                if (
+                    user_id in channel.voice_states
+                    or (pair.voice_channel_id, user_id) in self._reconnects
+                ):
                     continue
                 await self.handle_voice_departure(
                     discord.Object(id=user_id),
