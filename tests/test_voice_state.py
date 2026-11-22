@@ -9,7 +9,8 @@ from unittest.mock import AsyncMock, Mock
 import discord
 import pytest
 
-from lecturabot.bot import LecturaBot, LecturaCog
+from lecturabot.bot import LecturaBot
+from lecturabot.features import LecturaCog
 from lecturabot.config import BotConfig, ChannelPairConfig
 from lecturabot.models import ChannelMode
 from lecturabot.service import SessionError
@@ -271,7 +272,7 @@ async def test_uncached_voice_event_member_supports_voice_checks_and_departure(
     assert guild.get_member(member.id) is None
     assert before.channel.id == 201
     assert (None if after.channel is None else after.channel.id) == next_channel
-    monkeypatch.setattr("lecturabot.controller.VOICE_GRACE_SECONDS", 0)
+    bot.controller.voice_grace_seconds = 0
     await LecturaCog(bot.controller).on_voice_state_update(member, before, after)
     state = await bot.service.get_session(101)
     assert state is not None
@@ -304,7 +305,7 @@ async def test_reconnect_keeps_current_turn_until_a_later_disconnect_expires(
     assert state is not None and state.queue == [10, 20] and state.current_user_id == 10
     bot.controller._apply_transition.assert_not_awaited()
 
-    monkeypatch.setattr("lecturabot.controller.VOICE_GRACE_SECONDS", 0)
+    bot.controller.voice_grace_seconds = 0
     guild._update_voice_state(_voice_data(10, None), None)
     await change(member, 201, None)
     state = await bot.service.get_session(101)

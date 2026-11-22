@@ -73,6 +73,7 @@ class LecturaController:
     ) -> None:
         self.bot = bot
         self.config = config
+        self.voice_grace_seconds = VOICE_GRACE_SECONDS
         self.service = service
         # Service locks protect state commits; these locks extend the critical
         # section through Discord publication so an older snapshot cannot win
@@ -657,7 +658,7 @@ class LecturaController:
         key = (before_id, member.id)
         returned = self._reconnects[key] = asyncio.Event()
         try:
-            await asyncio.wait_for(returned.wait(), VOICE_GRACE_SECONDS)
+            await asyncio.wait_for(returned.wait(), self.voice_grace_seconds)
         except TimeoutError:
             await self.handle_voice_departure(member, before_id, returned=returned)
         finally:

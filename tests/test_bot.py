@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
-import discord
-from discord.ext import commands
 import pytest
 
-from lecturabot.bot import LecturaBot, LecturaCog
+from lecturabot.bot import FEATURES_EXTENSION, LecturaBot, MaintenanceCog
+from lecturabot.features import LecturaCog, SettingsView
 from lecturabot.config import BotConfig
+from lecturabot.repository import SQLiteRepository
 
 
 @pytest.mark.asyncio
@@ -42,23 +44,99 @@ def test_bilingual_queue_commands_are_registered() -> None:
 
     commands = cog.get_app_commands()
 
-    assert [command.name for command in commands] == ["queue", "cola"]
-    assert commands[0].description == "Open the LecturaBot reading queue."
-    assert commands[1].description == "Abre la cola de lectura de LecturaBot."
+    assert [command.name for command in commands] == ["settings", "queue", "cola"]
+    assert commands[1].description == "Open the LecturaBot reading queue."
+    assert commands[2].description == "Abre la cola de lectura de LecturaBot."
 
 
 @pytest.mark.asyncio
-async def test_development_scope_can_clear_old_global_aliases() -> None:
-    bot = commands.Bot(command_prefix="!", intents=discord.Intents.none())
-    await bot.add_cog(LecturaCog(object()))  # type: ignore[arg-type]
-    guild = discord.Object(id=123)
+@pytest.mark.parametrize("dev_guild_id", [None, 123])
+async def test_owner_can_reload_and_sync_in_configured_scope(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, dev_guild_id: int | None
+) -> None:
+    bot = LecturaBot(
+        BotConfig(
+            token="test-token",
+            guild_id=1,
+            bot_status_contact_user_id=900,
+            issue_contact_user_id=901,
+            database_path=tmp_path / "test.sqlite3",
+            channel_pairs=(),
+            dev_guild_id=dev_guild_id,
+        )
+    )
+    async with bot:
+        await bot.load_extension(FEATURES_EXTENSION)
+        original = bot.get_cog("LecturaCog")
+        controller = bot.controller
+        old_settings = bot.tree.get_command("settings", guild=bot.command_guild)
+        maintenance = MaintenanceCog(bot)
+        await bot.add_cog(maintenance, guild=bot.command_guild)
+        interaction = SimpleNamespace(
+            user=object(),
+            response=SimpleNamespace(defer=AsyncMock()),
+            edit_original_response=AsyncMock(),
+        )
+        is_owner = AsyncMock(return_value=False)
+        monkeypatch.setattr(bot, "is_owner", is_owner)
+        reload = bot.tree.get_command("reload", guild=bot.command_guild)
+        sync = bot.tree.get_command("sync", guild=bot.command_guild)
+        publish = AsyncMock(return_value=[object()] * 5)
+        monkeypatch.setattr(bot.tree, "sync", publish)
+        for command in (reload, sync):
+            await command.callback(maintenance, interaction)
+            interaction.edit_original_response.assert_awaited_with(
+                content="Only the bot owner can do this."
+            )
+        assert bot.get_cog("LecturaCog") is original
+        publish.assert_not_awaited()
 
-    bot.tree.copy_global_to(guild=guild)
-    bot.tree.clear_commands(guild=None)
+        is_owner.return_value = True
+        await reload.callback(maintenance, interaction)
+        assert bot.get_cog("LecturaCog") is not original
+        assert bot.get_cog("LecturaCog").controller is controller
+        assert bot.tree.get_command("settings", guild=bot.command_guild) is not old_settings
+        assert {cmd.name for cmd in bot.tree.get_commands(guild=bot.command_guild)} == {
+            "reload", "sync", "settings", "queue", "cola"
+        }
+        if dev_guild_id is not None:
+            assert bot.tree.get_commands() == []
 
-    assert bot.tree.get_commands() == []
-    assert [command.name for command in bot.tree.get_commands(guild=guild)] == [
-        "queue",
-        "cola",
-    ]
-    await bot.close()
+        await sync.callback(maintenance, interaction)
+        publish.assert_awaited_once_with(guild=bot.command_guild)
+
+
+@pytest.mark.asyncio
+async def test_grace_period_setting_persists(tmp_path: Path) -> None:
+    repository = SQLiteRepository(tmp_path / "settings.sqlite3")
+    await repository.initialize()
+    assert await repository.get_grace_minutes() == 5
+    await repository.set_grace_minutes(12)
+    assert await SQLiteRepository(repository.database_path).get_grace_minutes() == 12
+
+
+@pytest.mark.asyncio
+async def test_settings_panel_rejects_another_user_before_writing(tmp_path: Path) -> None:
+    repository = SQLiteRepository(tmp_path / "settings.sqlite3")
+    await repository.initialize()
+    controller = SimpleNamespace(
+        config=SimpleNamespace(guild_id=1),
+        service=SimpleNamespace(repository=repository),
+        voice_grace_seconds=300,
+    )
+    view = SettingsView(controller, user_id=10)  # type: ignore[arg-type]
+    interaction = SimpleNamespace(
+        guild_id=1,
+        user=SimpleNamespace(id=20),
+        response=SimpleNamespace(send_message=AsyncMock()),
+    )
+
+    assert not await view.authorized(interaction)  # type: ignore[arg-type]
+    assert await repository.get_grace_minutes() == 5
+    interaction.response.send_message.assert_awaited_once()
+
+    interaction.response.edit_message = AsyncMock()
+    await view.save(interaction, 7)  # type: ignore[arg-type]
+    assert await repository.get_grace_minutes() == 7
+    assert controller.voice_grace_seconds == 420
+    interaction.response.edit_message.assert_awaited_once()

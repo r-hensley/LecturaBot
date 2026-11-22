@@ -87,6 +87,11 @@ class SQLiteRepository:
                     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                 );
 
+                CREATE TABLE IF NOT EXISTS bot_settings (
+                    key TEXT PRIMARY KEY,
+                    value INTEGER NOT NULL
+                );
+
                 CREATE TABLE IF NOT EXISTS session_snapshots (
                     text_channel_id INTEGER PRIMARY KEY,
                     guild_id INTEGER NOT NULL,
@@ -155,6 +160,29 @@ class SQLiteRepository:
 
     async def schema_version(self) -> int:
         return self._schema_version_sync()
+
+    async def get_grace_minutes(self) -> int:
+        connection = self._connect()
+        try:
+            row = connection.execute(
+                "SELECT value FROM bot_settings WHERE key = 'voice_grace_minutes'"
+            ).fetchone()
+            return 5 if row is None else int(row[0])
+        finally:
+            connection.close()
+
+    async def set_grace_minutes(self, minutes: int) -> None:
+        async with self._write_lock:
+            connection = self._connect()
+            try:
+                connection.execute(
+                    "INSERT INTO bot_settings (key, value) VALUES ('voice_grace_minutes', ?) "
+                    "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                    (minutes,),
+                )
+                connection.commit()
+            finally:
+                connection.close()
 
     def _schema_version_sync(self) -> int:
         connection = self._connect()

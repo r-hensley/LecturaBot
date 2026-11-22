@@ -34,8 +34,8 @@ corrections, and reading-time statistics.
 The voice and text channels must match. For example, use the text channel for
 Lectura 2 while connected to the Lectura 2 voice channel.
 
-If you disconnect, reconnect to the same voice channel within five minutes to
-keep your place without pressing **Enter** again. After five minutes away, or
+If you disconnect, reconnect to the same voice channel within the server's
+grace period (five minutes by default) to keep your place without pressing **Enter** again. After the grace period, or
 if you move directly to another voice channel, the bot removes you. You
 lose your position and must join again at the end. The bot updates the active
 queue panel in place without posting it again. If the current reader leaves,
@@ -275,8 +275,8 @@ behavior or reading-text problems.
 Los canales de voz y texto deben corresponder. Por ejemplo, usa el canal de
 texto de Lectura 2 mientras estás conectado al canal de voz Lectura 2.
 
-Si te desconectas, vuelve al mismo canal de voz en menos de cinco minutos
-para conservar tu puesto sin volver a pulsar **Unirse**. Si pasan cinco minutos
+Si te desconectas, vuelve al mismo canal de voz dentro del período de gracia
+(cinco minutos por defecto) para conservar tu puesto sin volver a pulsar **Unirse**. Si pasa ese período
 o te mueves directamente a otro canal de voz, el bot te quitará de la cola.
 Perderás tu puesto y tendrás que unirte de nuevo al final. El bot actualizará
 el panel activo sin volver a publicarlo. Si sale el lector actual, el bot

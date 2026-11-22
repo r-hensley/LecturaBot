@@ -121,6 +121,22 @@ The bot initializes its SQLite database, loads the bundled reading catalog,
 restores active sessions, registers persistent Discord controls, and
 synchronizes its application commands during startup.
 
+### Update reading commands without restarting
+
+After the first startup with live reload support, update the source files on
+the bot host. The Discord bot owner can then run these slash commands:
+
+- `/reload` loads the updated `lecturabot.features` extension, which
+  contains the slash command handlers, settings panel, and gateway listeners.
+- `/sync` publishes slash command additions, removals, or definition
+  changes. It uses the configured development guild or global scope. Handler
+  and panel changes alone only need `reload`. Reopen `/settings` to get the
+  updated panel.
+
+Reload keeps active reading sessions and voice timers in memory. Changes to
+the controller, service, persistent queue views, dependencies, or startup
+configuration still require a restart.
+
 ## Reading catalog
 
 LecturaBot uses a bundled catalog and does not contact Google Docs while
@@ -200,8 +216,13 @@ sources/
 
 ## Operational notes
 
+- Server administrators can use `/settings` to view or change the voice reconnect
+  grace period. The dropdown offers common durations; **Other…** opens a modal
+  for a custom value from 0–60 minutes. Changes
+  take effect for new disconnects and persist across bot restarts.
+
 - Active queue panels and reading controls are persisted across restarts.
-- Disconnected readers have five minutes to return to the same voice channel.
+- Disconnected readers have five minutes by default to return to the same voice channel.
   Moving directly to another voice channel removes them immediately.
 - A room session ends when its queue becomes empty.
 - Custom texts apply only to the current turn and are not added to the catalog.
