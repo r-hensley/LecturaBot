@@ -95,6 +95,21 @@ def test_source_inventory_preserves_held_french_and_portuguese() -> None:
     assert report["spreadsheet"]["held_language_rows"] == 272
 
 
+def test_reported_typo_corrections_are_in_active_readings() -> None:
+    records = json.loads(DEFAULT_OUTPUT.read_text(encoding="utf-8"))
+    bodies = {item["source_ref"]: item["body"] for item in records}
+    corrections = {
+        "ENGLISH INTERMEDIATE!A79": "Malcolm Gladwell",
+        "ENGLISH INTERMEDIATE!A172": "waiting for backup",
+        "ENGLISH INTERMEDIATE!A266": "heavy load placed upon you",
+        "ENGLISH INTERMEDIATE!A299": "sound cliché",
+        "ENGLISH INTERMEDIATE!A314": "John and I made",
+        "google_doc_readings.txt:1690": "Espero que me llame.",
+    }
+    for source_ref, corrected_text in corrections.items():
+        assert corrected_text in bodies[source_ref]
+
+
 async def test_runtime_sync_reconciles_an_existing_legacy_catalog(
     tmp_path: Path,
 ) -> None:
@@ -111,7 +126,7 @@ async def test_runtime_sync_reconciles_an_existing_legacy_catalog(
         first.reenabled,
         first.updated,
         first.disabled,
-    ) == (989, 0, 0, 67)
+    ) == (992, 0, 0, 70)
     second = await repository.sync_texts(DEFAULT_OUTPUT)
     assert (second.inserted, second.reenabled, second.updated, second.disabled) == (
         0,

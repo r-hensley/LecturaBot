@@ -145,6 +145,16 @@ HYBRID_VARIANT_REPLACEMENTS: Final = {
     ),
 }
 
+# Corrections reported after the source snapshots were captured.
+EDITORIAL_REPLACEMENTS: Final = {
+    "ENGLISH INTERMEDIATE!A79": ("Malcom Gladwell", "Malcolm Gladwell"),
+    "ENGLISH INTERMEDIATE!A172": ("waiting for back up", "waiting for backup"),
+    "ENGLISH INTERMEDIATE!A266": ("heavy load place upon you", "heavy load placed upon you"),
+    "ENGLISH INTERMEDIATE!A299": ("sound cliche", "sound cliché"),
+    "ENGLISH INTERMEDIATE!A314": ("Ni-san and I made", "John and I made"),
+    "google_doc_readings.txt:1690": ("Espero me llame.", "Espero que me llame."),
+}
+
 # Two cells contain several complete readings.  Split only at the spreadsheet's
 # own non-empty line boundaries, retaining the spreadsheet wording.
 COMPOUND_SPREADSHEET_CELLS: Final = {
@@ -740,6 +750,22 @@ def build_catalog(
         if legacy.source_line not in LEGACY_ONLY_SOURCE_LINES:
             continue
         records.append(replace(legacy, source_kind="legacy_only"))
+
+    corrected_refs: set[str] = set()
+    for index, record in enumerate(records):
+        if replacement := EDITORIAL_REPLACEMENTS.get(record.source_ref):
+            old, new = replacement
+            if record.body.count(old) != 1:
+                raise CatalogBuildError(
+                    f"editorial correction source drifted: {record.source_ref}"
+                )
+            records[index] = replace(record, body=record.body.replace(old, new))
+            corrected_refs.add(record.source_ref)
+    if corrected_refs != set(EDITORIAL_REPLACEMENTS):
+        raise CatalogBuildError(
+            f"editorial correction references missing: "
+            f"{sorted(set(EDITORIAL_REPLACEMENTS) - corrected_refs)}"
+        )
 
     keys = [_record_key(record) for record in records]
     if len(set(keys)) != len(keys):
