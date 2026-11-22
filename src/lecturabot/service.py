@@ -114,8 +114,9 @@ class SessionService:
         self._states: dict[int, SessionState] = {}
         self._locks: dict[int, asyncio.Lock] = {}
 
-    async def initialize(self) -> None:
-        """Load snapshots and repair states interrupted before publication."""
+    async def initialize(self) -> set[int]:
+        """Restore snapshots and return rooms with a turn underway at startup."""
+        active_rooms: set[int] = set()
         for state in await self.repository.load_all_sessions():
             changed = await self._refresh_member_statistics(state)
             if not state.queue and (
@@ -142,6 +143,9 @@ class SessionService:
             if changed:
                 await self.repository.save_session(state)
             self._states[state.text_channel_id] = state
+            if state.phase in (SessionPhase.SELECTING, SessionPhase.READING):
+                active_rooms.add(state.text_channel_id)
+        return active_rooms
 
     def _lock_for(self, text_channel_id: int) -> asyncio.Lock:
         return self._locks.setdefault(text_channel_id, asyncio.Lock())

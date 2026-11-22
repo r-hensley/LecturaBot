@@ -757,7 +757,7 @@ class LecturaController:
                 )
         return complete
 
-    async def reconcile_session_messages(self) -> bool:
+    async def reconcile_session_messages(self, restart_notice_rooms: set[int]) -> bool:
         """Restore canonical panels and active controls after a restart."""
         complete = True
         for pair in self.config.channel_pairs:
@@ -766,7 +766,7 @@ class LecturaController:
                     state = await self.service.get_session(pair.text_channel_id)
                     if state is None:
                         continue
-                    await self._refresh_queue(state)
+                    panel = await self._refresh_queue(state)
                     if state.phase is SessionPhase.SELECTING:
                         await self._ensure_picker(state)
                     elif state.phase is SessionPhase.READING:
@@ -779,6 +779,12 @@ class LecturaController:
                                 reader_id=reading.reader_id,
                             )
                             await self._ensure_picker(recovered)
+                    if pair.text_channel_id in restart_notice_rooms:
+                        await panel.channel.send(
+                            "LecturaBot se reinició y ya está disponible de nuevo.\n"
+                            "LecturaBot restarted and is back online."
+                        )
+                        restart_notice_rooms.remove(pair.text_channel_id)
             except Exception:
                 complete = False
                 LOGGER.exception(

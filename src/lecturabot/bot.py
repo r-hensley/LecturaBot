@@ -86,6 +86,7 @@ class LecturaBot(commands.Bot):
         self.controller = LecturaController(self, config, self.service)
         self._reconciled = False
         self._reconcile_lock = asyncio.Lock()
+        self._restart_notice_rooms: set[int] = set()
 
     async def setup_hook(self) -> None:
         await self.repository.initialize()
@@ -104,7 +105,7 @@ class LecturaBot(commands.Bot):
             sync.updated,
             sync.disabled,
         )
-        await self.service.initialize()
+        self._restart_notice_rooms = await self.service.initialize()
 
         await self.add_cog(LecturaCog(self.controller))
         self.add_view(QueueView(self.controller))
@@ -156,7 +157,7 @@ class LecturaBot(commands.Bot):
                 return
             voice_ready = await self.controller.reconcile_voice_membership()
             controls_ready = (
-                await self.controller.reconcile_session_messages()
+                await self.controller.reconcile_session_messages(self._restart_notice_rooms)
                 if voice_ready
                 else False
             )

@@ -378,3 +378,34 @@ async def test_concurrent_startup_events_reconcile_once(
     voice.assert_awaited_once()
     controls.assert_awaited_once()
     assert bot._reconciled is True
+
+
+async def test_restart_notice_only_for_preexisting_turn_and_only_once(
+    bot: LecturaBot, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _guild(bot, {10: 201, 20: 202})
+    await _queue(bot, 10, start=True)
+    await _queue(bot, 20, channel_id=102)
+    bot._restart_notice_rooms = await bot.service.initialize()
+    # This room starts after the saved sessions have been loaded.
+    await bot.service.start(text_channel_id=102, actor_id=20)
+
+    panels = {room: AsyncMock() for room in (101, 102)}
+    monkeypatch.setattr(bot.controller, "_refresh_queue", AsyncMock(
+        side_effect=lambda state: panels[state.text_channel_id]
+    ))
+    monkeypatch.setattr(bot.controller, "_ensure_picker", AsyncMock())
+    send = panels[101].channel.send
+    send.side_effect = [RuntimeError("send failed"), None]
+
+    await bot._reconcile_startup()
+    assert not bot._reconciled
+    await bot._reconcile_startup()
+    assert bot._reconciled
+    await bot.on_guild_unavailable(discord.Object(id=1))
+    await bot._reconcile_startup()
+
+    assert send.await_count == 2
+    message = send.await_args.args[0]
+    assert "se reinició" in message and "back online" in message
+    panels[102].channel.send.assert_not_awaited()
