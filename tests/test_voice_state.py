@@ -381,15 +381,17 @@ async def test_concurrent_startup_events_reconcile_once(
     assert bot._reconciled is True
 
 
-async def test_restart_notice_only_for_preexisting_turn_and_only_once(
-    bot: LecturaBot, monkeypatch: pytest.MonkeyPatch,
+@pytest.mark.parametrize("pause_before_restart", [False, True], ids=["selecting", "paused"])
+async def test_restart_notice_only_for_preexisting_nonempty_queue_and_only_once(
+    bot: LecturaBot, monkeypatch: pytest.MonkeyPatch, pause_before_restart: bool,
 ) -> None:
     _guild(bot, {10: 201, 20: 202})
     await _queue(bot, 10, start=True)
-    await _queue(bot, 20, channel_id=102)
+    if pause_before_restart:
+        await bot.service.pause_unpublished_selection(text_channel_id=101, reader_id=10)
     bot._restart_notice_rooms = await bot.service.initialize()
-    # This room starts after the saved sessions have been loaded.
-    await bot.service.start(text_channel_id=102, actor_id=20)
+    # This room's queue fills after the saved sessions have been loaded.
+    await _queue(bot, 20, channel_id=102, start=True)
 
     panels = {room: AsyncMock() for room in (101, 102)}
     monkeypatch.setattr(bot.controller, "_refresh_queue", AsyncMock(
