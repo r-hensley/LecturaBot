@@ -944,7 +944,7 @@ class LecturaController:
             )
             await self._refresh_queue(
                 state,
-                repost=transition.repost_queue and self.queue_layout is QueueLayout.SINGLE,
+                repost=transition.repost_queue,
                 notify_reader=transition.activated_reader_id is not None,
             )
         except Exception:

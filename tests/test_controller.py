@@ -736,7 +736,7 @@ async def test_turn_transition_notifies_the_next_reader(layout: QueueLayout) -> 
     assert events == [
         "delete:500",
         "retire:600",
-        f"refresh:{layout is QueueLayout.SINGLE}:True",
+        "refresh:True:True",
     ]
 
 

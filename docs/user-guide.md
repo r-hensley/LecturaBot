@@ -25,8 +25,8 @@ corrections, and reading-time statistics.
    click **Otro texto / Different Text** to receive another passage from the
    same language and level. Other people in the voice channel can submit
    pronunciation corrections.
-8. Review the corrections, then click **Saltar turno / Skip Turn** in the
-   queue. The current reader's click ends the turn immediately.
+8. Review the corrections, then click **Terminar mi turno / End my turn** on
+   your reading message. The bot reposts the queue for the next turn.
 
 ### Join the correct room
 
@@ -181,7 +181,7 @@ verify native-language roles.
 
 ### Finish or skip a turn
 
-- The **current reader** clicks **Saltar turno / Skip Turn** after reviewing the
+- The **current reader** clicks **Terminar mi turno / End my turn** after reviewing the
   corrections. A completed reading is added to that reader's statistics.
 - **Otro texto / Different Text** changes only the current catalog passage. It
   does not skip the reader's turn or add a completed reading to statistics.
@@ -206,7 +206,7 @@ The queue panel shows:
 - `prom. / avg.` shows the average duration of those readings in `MM:SS`. It appears once you have a completed reading.
 
 Reading time begins when the bot publishes the selected passage and ends when
-the current reader presses **Skip Turn**. Updated statistics appear on the queue.
+the current reader ends their turn. Updated statistics appear on the reposted queue.
 
 Each person has an independent statistics window. A normal completed reading
 starts or extends it for six hours from that completion. After exactly six
@@ -251,8 +251,8 @@ Report all problems in the [Discord support thread](https://discord.com/channels
 7. Lee el texto en voz alta. Si no quieres el texto del catálogo, pulsa **Otro
    texto / Different Text** para recibir otro del mismo idioma y nivel. Las
    otras personas del canal de voz pueden enviar correcciones de pronunciación.
-8. Revisa las correcciones y pulsa **Saltar turno / Skip Turn** en la cola.
-   Si eres el lector actual, tu turno termina de inmediato.
+8. Revisa las correcciones y pulsa **Terminar mi turno / End my turn** en tu
+   mensaje de lectura. El bot vuelve a publicar la cola para el siguiente turno.
 
 ### Usa la sala correcta
 
@@ -400,7 +400,7 @@ los roles de idioma nativo.
 
 ### Termina o salta un turno
 
-- El **lector actual** pulsa **Saltar turno / Skip Turn** después de revisar las
+- El **lector actual** pulsa **Terminar mi turno / End my turn** después de revisar las
   correcciones. La lectura completada se añade a sus estadísticas.
 - **Otro texto / Different Text** solo cambia el texto actual del catálogo. No
   salta el turno del lector ni añade una lectura completada a las estadísticas.
@@ -425,7 +425,7 @@ El panel de la cola muestra:
 - `prom. / avg.` muestra la duración media de esas lecturas en formato `MM:SS`. Aparece cuando ya has completado al menos una lectura.
 
 El tiempo comienza cuando el bot publica el texto elegido y termina cuando el
-lector actual pulsa **Skip Turn**. Las estadísticas actualizadas aparecen en la cola.
+lector actual termina su turno. Las estadísticas actualizadas aparecen en la cola que se vuelve a publicar.
 
 Cada persona tiene una ventana de estadísticas independiente. Una lectura
 completada normalmente la inicia o la prolonga durante seis horas desde esa

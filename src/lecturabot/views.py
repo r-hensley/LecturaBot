@@ -241,7 +241,6 @@ class ReadingView(discord.ui.View):
         super().__init__(timeout=None)
         self.controller = controller
         if not legacy_turn_controls:
-            self.remove_item(self.pass_reading)
             self.remove_item(self.skip_afk_reading)
         if not allow_different_text:
             for item in self.children:
@@ -279,7 +278,7 @@ class ReadingView(discord.ui.View):
         await self.controller.handle_different_text(interaction)
 
     @discord.ui.button(
-        label="Pasar turno / Pass Turn",
+        label="Terminar mi turno / End my turn",
         style=discord.ButtonStyle.danger,
         custom_id="pass_reading",
         row=0,

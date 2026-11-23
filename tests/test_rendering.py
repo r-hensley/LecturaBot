@@ -508,6 +508,7 @@ async def test_persistent_views_match_button_contract() -> None:
     assert _button_contract(reading) == [
         ("Enviar correcciones / Submit corrections", "submit_correction", 3, 0),
         ("Otro texto / Different Text", "different_catalog_text", 1, 0),
+        ("Terminar mi turno / End my turn", "pass_reading", 4, 0),
     ]
 
     custom_reading = ReadingView(  # type: ignore[arg-type]
