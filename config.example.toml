@@ -3,9 +3,8 @@
 
 [bot]
 guild_id = 100000000000000001
-# Ping this user when the bot itself is unavailable.
+# Legacy support contact IDs. Keep both fields in the configuration.
 bot_status_contact_user_id = 100000000000000002
-# Ping this user to review bugs or reading-text problems.
 issue_contact_user_id = 100000000000000003
 # Optional: sync slash commands immediately to one development guild.
 # dev_guild_id = 100000000000000001

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING
 
 import discord
@@ -72,6 +73,7 @@ class LecturaController:
         self.config = config
         self.voice_grace_seconds = VOICE_GRACE_SECONDS
         self.service = service
+        self.queue_help: Callable[[discord.Interaction], Awaitable[None]] | None = None
         # Service locks protect state commits; these locks extend the critical
         # section through Discord publication so an older snapshot cannot win
         # a race and overwrite a newer queue or correction message.
@@ -104,17 +106,11 @@ class LecturaController:
         action: str,
     ) -> None:
         if action == "instructions":
-            help_embed = build_instructions_embed()
-            help_embed.add_field(
-                name="Soporte / Support",
-                value=(
-                    f"El bot no funciona / Bot availability → <@{self.config.bot_status_contact_user_id}>\n"
-                    f"Errores o textos / Bugs or reading texts → <@{self.config.issue_contact_user_id}>"
-                ),
-                inline=False,
-            )
+            if self.queue_help is not None:
+                await self.queue_help(interaction)
+                return
             await interaction.response.send_message(
-                embed=help_embed,
+                embed=build_instructions_embed(),
                 ephemeral=True,
                 allowed_mentions=discord.AllowedMentions.none(),
             )

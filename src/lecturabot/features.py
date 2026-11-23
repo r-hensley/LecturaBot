@@ -2,15 +2,35 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING
 
 import discord
 from discord import app_commands
 from discord.ext import commands
 
+from .rendering import build_instructions_embed
+
 if TYPE_CHECKING:
     from .bot import LecturaBot
     from .controller import LecturaController
+
+
+SUPPORT_THREAD_URL = "https://discord.com/channels/243838819743432704/1525628752074113127"
+
+
+async def send_queue_help(interaction: discord.Interaction) -> None:
+    embed = build_instructions_embed().add_field(
+        name="Soporte / Support",
+        value=(
+            f"Informa de cualquier problema en el [hilo de soporte]({SUPPORT_THREAD_URL}).\n"
+            f"Report any problem in the [support thread]({SUPPORT_THREAD_URL})."
+        ),
+        inline=False,
+    )
+    await interaction.response.send_message(
+        embed=embed, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
+    )
 
 
 def settings_embed(minutes: int) -> discord.Embed:
@@ -99,6 +119,29 @@ class LecturaCog(commands.Cog):
 
     def __init__(self, controller: LecturaController) -> None:
         self.controller = controller
+        self._legacy_queue_action: Callable[[discord.Interaction, str], Awaitable[None]] | None = None
+
+    def install_queue_help(self) -> None:
+        if hasattr(self.controller, "queue_help"):
+            self.controller.queue_help = send_queue_help
+        else:
+            # Existing persistent views can still hold the pre-upgrade controller.
+            original = self.controller.handle_queue_action
+            self._legacy_queue_action = original
+
+            async def handle_queue_action(interaction: discord.Interaction, action: str) -> None:
+                if action == "instructions":
+                    await send_queue_help(interaction)
+                else:
+                    await original(interaction, action)
+
+            self.controller.handle_queue_action = handle_queue_action  # type: ignore[method-assign]
+
+    async def cog_unload(self) -> None:
+        if self._legacy_queue_action is not None:
+            self.controller.handle_queue_action = self._legacy_queue_action  # type: ignore[method-assign]
+        elif getattr(self.controller, "queue_help", None) is send_queue_help:
+            self.controller.queue_help = None
 
     @app_commands.command(name="settings", description="Manage LecturaBot settings.")
     @app_commands.guild_only()
@@ -149,4 +192,6 @@ class LecturaCog(commands.Cog):
 
 
 async def setup(bot: LecturaBot) -> None:
-    await bot.add_cog(LecturaCog(bot.controller), guild=bot.command_guild)
+    cog = LecturaCog(bot.controller)
+    await bot.add_cog(cog, guild=bot.command_guild)
+    cog.install_queue_help()

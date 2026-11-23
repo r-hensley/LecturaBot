@@ -84,10 +84,8 @@ cp config.example.toml config.toml
 Replace the placeholder Discord IDs in each `[[channel_pairs]]` entry.
 Every text-channel ID and voice-channel ID must be unique.
 
-The two support contacts are configured separately:
-
-- `bot_status_contact_user_id` — shown for **Bot not working?**
-- `issue_contact_user_id` — shown for **Found a bug or text issue?**
+The **? Ayuda / Help** reply directs all reports to the [Discord support thread](https://discord.com/channels/243838819743432704/1525628752074113127).
+The configuration still requires the legacy `bot_status_contact_user_id` and `issue_contact_user_id` fields.
 
 `config.toml` is ignored by Git. The Discord token is accepted only through the
 environment:
@@ -127,7 +125,8 @@ After the first startup with live reload support, update the source files on
 the bot host. The Discord bot owner can then run these slash commands:
 
 - `/reload` loads the updated `lecturabot.features` extension, which
-  contains the slash command handlers, settings panel, and gateway listeners.
+  contains the slash command handlers, settings panel, Help support links,
+  and gateway listeners.
 - `/sync` publishes slash command additions, removals, or definition
   changes. It uses the configured development guild or global scope. Handler
   and panel changes alone only need `reload`. Reopen `/settings` to get the

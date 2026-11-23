@@ -48,7 +48,7 @@ a fresh panel for that new turn.
 | --- | --- |
 | **Unirse / Join** | Adds you to the end of the reader queue. |
 | **Salir / Leave** | Removes you from the queue. |
-| **? Ayuda / Help** | Shows instructions and support contacts in a private reply. |
+| **? Ayuda / Help** | Shows instructions and a link to the support thread in a private reply. |
 | **Comenzar / Start** | Starts the rotation with one or more queued participants. |
 
 `/queue` publishes a fresh public queue panel in the channel. Running it again
@@ -243,7 +243,7 @@ itself at the expiry time.
 | No unused catalog text remains at this level | Choose another level or submit your own text; the bot will not repeat a passage for you in the same room session. |
 | Catalog choices fail in Other Languages | Use **Your own text** and provide the language name. |
 
-**? Ayuda / Help** shows separate contacts for bot availability and for bugs or reading texts.
+Report all problems in the [Discord support thread](https://discord.com/channels/243838819743432704/1525628752074113127), including bot outages, bugs, and issues with reading texts.
 
 ## Español
 
@@ -284,7 +284,7 @@ panel nuevo para ese turno.
 | --- | --- |
 | **Unirse / Join** | Te añade al final de la cola de lectores. |
 | **Salir / Leave** | Te quita de la cola. |
-| **? Ayuda / Help** | Muestra las instrucciones y los contactos de soporte en privado. |
+| **? Ayuda / Help** | Muestra las instrucciones y un enlace al hilo de soporte en privado. |
 | **Comenzar / Start** | Comienza la rotación con una o más personas en la cola. |
 
 `/cola` publica un panel nuevo y público de la cola en el canal. Volver a
@@ -474,5 +474,4 @@ la ventana.
 | No queda ningún texto sin usar en ese nivel | Elige otro nivel o proporciona tu propio texto; el bot no repetirá un texto para ti durante la misma sesión de sala. |
 | Las opciones del catálogo fallan en Other Languages | Usa **Your own text** e indica el nombre del idioma. |
 
-**? Ayuda / Help** muestra contactos distintos para problemas de disponibilidad
-del bot y para errores o problemas con los textos.
+Informa de cualquier problema en el [hilo de soporte de Discord](https://discord.com/channels/243838819743432704/1525628752074113127), incluso si el bot no funciona o si encuentras errores o problemas con los textos.

@@ -108,8 +108,9 @@ async def test_owner_can_reload_and_sync_in_configured_scope(
         publish.assert_awaited_once_with(guild=bot.command_guild)
 
 
+@pytest.mark.parametrize("legacy_controller", [False, True])
 async def test_private_socket_reloads_features_and_keeps_session_state(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, legacy_controller: bool,
 ) -> None:
     path = tmp_path / "control" / "bot.sock"
     monkeypatch.setenv("LECTURABOT_CONTROL_SOCKET", str(path))
@@ -123,6 +124,10 @@ async def test_private_socket_reloads_features_and_keeps_session_state(
             channel_pairs=(),
         )
     )
+    original_queue_action = AsyncMock()
+    if legacy_controller:
+        del bot.controller.queue_help
+        monkeypatch.setattr(bot.controller, "handle_queue_action", original_queue_action)
     sync = AsyncMock(return_value=0)
     monkeypatch.setattr(bot, "sync_app_commands", sync)
     async with bot:
@@ -146,8 +151,21 @@ async def test_private_socket_reloads_features_and_keeps_session_state(
         assert await send_request(path, "reload", ["features"]) == {"ok": True, "completed": ["features"]}
         assert bot.get_cog("LecturaCog") is not original
         assert bot.get_cog("LecturaCog").controller is controller
+        send_message = AsyncMock()
+        interaction = SimpleNamespace(response=SimpleNamespace(send_message=send_message))
+        await controller.handle_queue_action(interaction, "instructions")
+        reply = send_message.await_args.kwargs
+        assert reply["ephemeral"] is True
+        support, = reply["embed"].fields
+        assert support.value.count("https://discord.com/channels/243838819743432704/1525628752074113127") == 2
+        assert "<@" not in support.value
+        if legacy_controller:
+            await controller.handle_queue_action(interaction, "enter_queue")
+            original_queue_action.assert_awaited_once_with(interaction, "enter_queue")
         sync.assert_awaited_once()
     assert not path.exists()
+    if legacy_controller:
+        assert bot.controller.handle_queue_action is original_queue_action
 
 
 @pytest.mark.asyncio
