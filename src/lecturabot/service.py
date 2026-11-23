@@ -937,7 +937,7 @@ class SessionService:
             await self._persist_locked(state)
             return Transition(
                 self._snapshot(state),
-                "Se saltó el turno ausente. / The AFK turn was skipped.",
+                "Se saltó el turno del lector ausente. / The AFK turn was skipped.",
                 activated_reader_id=state.current_user_id,
                 retired_picker_message_id=retired_picker,
                 retired_reading_message_id=retired_reading,
@@ -1021,11 +1021,22 @@ class SessionService:
 
     @staticmethod
     def _wrong_phase(expected: str) -> SessionError:
-        return SessionError(
-            "wrong_phase",
-            f"La sesión no está en fase {expected}. / "
-            f"The session is not in the {expected} phase.",
-        )
+        messages = {
+            "selecting": (
+                "Ya no puedes elegir un texto para este turno. / "
+                "You can no longer choose a text for this turn."
+            ),
+            "reading": (
+                "No hay una lectura activa para este turno. / "
+                "There is no active reading for this turn."
+            ),
+            "active turn": "No hay ningún turno activo. / There is no active turn.",
+            "selecting or reading": (
+                "El turno debe estar activo para usar este control. / "
+                "The turn must be active to use this control."
+            ),
+        }
+        return SessionError("wrong_phase", messages[expected])
 
     def _activate_reader(self, state: SessionState, index: int) -> None:
         state.current_index = index

@@ -52,7 +52,7 @@ class QueuePanel(ui.LayoutView):
             ))
         elif member is not None and state is not None:
             reading = state.active_reading
-            label = "Lee ahora / Reading now" if reading else "Eligiendo texto / Choosing a text"
+            label = "Ahora leyendo / Reading now" if reading else "Eligiendo texto / Choosing a text"
             # Keep the reader mention for the one turn-start notification.
             detail = f"**{label}**\n<@{member.user_id}>"
             if reading:
@@ -76,7 +76,8 @@ class QueuePanel(ui.LayoutView):
             card.add_item(ui.Separator())
             picker = "### Elige un texto / Pick a text"
             if member is not None:
-                picker += "\n-# Turno de / Turn for " + _name(member.display_name)
+                name = _name(member.display_name)
+                picker += f"\n-# Turno de {name} / {name}’s turn"
             card.add_item(ui.TextDisplay(picker))
             card.add_item(ui.ActionRow(self._button(
                 "queue_custom_text", "Tu propio texto / Use your own text",
@@ -138,7 +139,7 @@ class QueuePanel(ui.LayoutView):
 
     def _turn_button(self, phase: SessionPhase, *, vote: bool, count: int = 0):
         if vote:
-            label = "Votar para saltar / Vote to skip reader"
+            label = "Votar para saltar el turno / Vote to skip the turn"
             if count:
                 label += f" · {count}/{self.controller.service.skip_vote_threshold}"
             return self._button(

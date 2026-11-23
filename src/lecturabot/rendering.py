@@ -255,7 +255,7 @@ def build_corrections_embed(reading: ActiveReading) -> discord.Embed:
             _format_correction_text(entry.text, discarded=entry.discarded)
             for entry in group.entries
         )
-        blocks.append(f"<@{group.user_id}> suggests:\n{items}")
+        blocks.append(f"<@{group.user_id}> sugiere / suggests:\n{items}")
     description = "\n\n".join(blocks) if blocks else NO_CORRECTIONS
     if len(description) > MAX_EMBED_DESCRIPTION:
         raise CorrectionSummaryOverflow(
@@ -263,7 +263,7 @@ def build_corrections_embed(reading: ActiveReading) -> discord.Embed:
             f"Discord allows {MAX_EMBED_DESCRIPTION}"
         )
     return discord.Embed(
-        title=f"Correcciones / Corrections : {reading.correction_count}",
+        title=f"Correcciones / Corrections: {reading.correction_count}",
         description=description,
     )
 
@@ -278,17 +278,17 @@ def build_instructions_embed() -> discord.Embed:
             "When ready, press **Start**; you can start by yourself.\n"
             "3. Cuando sea tu turno, elige un texto del catálogo o pulsa **Tu propio texto** en la cola. / "
             "When it is your turn, choose a catalog passage or press **Use your own text** in the queue.\n"
-            "4. Los demás pueden usar **Poner Correcciones / Submit "
-            "Corrections**, o responder al mensaje de lectura con la mención "
+            "4. Los demás pueden usar **Enviar correcciones / Submit corrections** "
+            "o responder al mensaje de lectura con la mención "
             "al responder activada (@ ON) o mencionando al bot. / Others can "
-            "use **Submit Corrections**, or reply to the reading message "
+            "use **Submit corrections**, or reply to the reading message "
             "with ping on reply enabled (@ ON) or an explicit @mention "
             "of the bot.\n"
             "5. Solo el lector actual puede pulsar **Pasar turno / Pass "
             "Turn** después de revisar las correcciones. / Only the current "
             "reader can pass after reviewing the corrections.\n"
             "6. Si el lector está ausente, tres participantes distintos en "
-            "la cola pueden pulsar **Votar para saltar**. / If the reader is AFK, "
-            "three different queued participants can press **Vote to skip reader**."
+            "la cola deben pulsar **Votar para saltar el turno**. / If the reader is away, "
+            "three different queued participants must press **Vote to skip the turn**."
         ),
     )

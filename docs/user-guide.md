@@ -109,7 +109,7 @@ corrections to their own reading.
 
 Use either method:
 
-1. Click **Poner Correcciones / Submit Corrections** on the reading message.
+1. Click **Enviar correcciones / Submit corrections** on the reading message.
    Separate corrected words or phrases with newlines or commas.
 2. Reply directly to the bot's active reading message with **ping on reply
    enabled**, or explicitly @mention the current bot in that same reply.
@@ -120,8 +120,8 @@ Use either method:
 The bot removes its own explicit @mention before reading your corrections, so
 the mention is not saved as a correction. If the bot receives an eligible reply
 with no readable text, it sends a reminder in English and Spanish to enable the
-reply ping, explicitly mention it in your reply, or use **Poner Correcciones /
-Submit Corrections**. The correction form and custom reading form work without
+reply ping, explicitly mention it in your reply, or use **Enviar correcciones / Submit corrections**. The correction form and
+custom reading form work without
 a mention.
 
 Only commas outside parentheses separate entries. For example,
@@ -183,7 +183,7 @@ verify native-language roles.
 - **Otro texto / Different Text** changes only the current catalog passage. It
   does not skip the reader's turn or add a completed reading to statistics.
 - To force an absent reader's turn to end, use the separate **Votar para
-  saltar / Vote to skip reader** button. The queue panel shows the vote count.
+  saltar el turno / Vote to skip the turn** button. The queue panel shows the vote count.
   Exactly three different queued,
   non-current readers must vote. A person can vote only once per turn, and the
   three-vote requirement is not reduced when fewer eligible voters are
@@ -203,16 +203,10 @@ new turn. If the queue becomes empty, the session ends.
 
 The queue panel shows:
 
-- numbered upcoming-turn positions: `1` is the current reader, `2` is next,
-  and the remaining numbers follow the reading rotation
-- `turns`: the number of readings you completed normally during your current
-  statistics window
-- `avg reading time`: your average completed reading time in that same window,
-  formatted as `MM:SS`
-- `turns: 0`: you do not currently have a completed reading in an active
-  statistics window
-- `avg reading time: n/a`: there is no active completed reading from which to
-  calculate an average
+- `En cola / In the queue` lists readers in order before the session starts.
+- `Siguientes / Up next` lists the readers after the current reader, starting at position 2.
+- `turnos / turns` counts readings you completed during your current statistics window.
+- `prom. / avg.` shows the average duration of those readings in `MM:SS`. It appears once you have a completed reading.
 
 Reading time begins when the bot publishes the selected passage and ends when
 the current reader presses **Pass Turn**. The newly completed reading and its
@@ -220,9 +214,9 @@ updated statistics appear in the fresh queue panel for the next turn.
 
 Each person has an independent statistics window. A normal completed reading
 starts or extends it for six hours from that completion. After exactly six
-hours without another normal completion, `turns` resets to `0` and the average
-resets to `n/a` on the next queue refresh; the next completed reading starts
-again at `turns: 1`. Joining, leaving, starting a queue, selection-only passes,
+hours without another completed reading, the next queue refresh shows zero turns and
+omits the average. Your next completed reading brings the count back to one.
+Joining, leaving, starting a queue, selection-only passes,
 AFK skips, and other users' turns do not extend your window. An already-posted
 Discord panel updates when the queue is next refreshed rather than changing by
 itself at the expiry time.
@@ -238,7 +232,7 @@ itself at the expiry time.
 | You already voted | Your skip vote was recorded and cannot be submitted twice. |
 | An AFK skip does not advance | Three different queued, non-current readers are required; the threshold is not reduced. |
 | A correction continuation appears | Use the newest reading message for additional corrections and turn controls; earlier summaries are frozen history. |
-| The bot cannot read my correction reply | Reply to the active reading message with the reply ping enabled or an explicit @mention of the current bot, or use **Poner Correcciones / Submit Corrections**. |
+| The bot cannot read my correction reply | Reply to the active reading message with the reply ping enabled or an explicit @mention of the current bot, or use **Enviar correcciones / Submit corrections**. |
 | A correction is listed but nothing is highlighted | The bot did not find a clear exact or fuzzy source match. The correction was still saved for the reader to review. |
 | No unused catalog text remains at this level | Choose another level or submit your own text; the bot will not repeat a passage for you in the same room session. |
 | Catalog choices fail in Other Languages | Use **Your own text** and provide the language name. |
@@ -346,7 +340,7 @@ su propia lectura.
 
 Puedes usar cualquiera de estos métodos:
 
-1. Pulsa **Poner Correcciones / Submit Corrections** en el mensaje de lectura.
+1. Pulsa **Enviar correcciones / Submit corrections** en el mensaje de lectura.
    Separa las palabras o frases corregidas con saltos de línea o comas.
 2. Responde directamente al mensaje de lectura activo del bot con **la mención
    al responder activada**, o menciona explícitamente con @ al bot actual en esa
@@ -358,7 +352,7 @@ El bot elimina su propia @mención explícita antes de leer tus correcciones, po
 lo que la mención no se guarda como corrección. Si recibe una respuesta válida
 sin texto que pueda leer, envía un recordatorio en español e inglés para que
 actives la mención al responder, lo menciones explícitamente en la respuesta o
-uses **Poner Correcciones / Submit Corrections**. Los formularios de correcciones
+uses **Enviar correcciones / Submit corrections**. Los formularios de correcciones
 y de texto propio funcionan sin mencionar al bot.
 
 Solo las comas que estén fuera de paréntesis separan entradas. Por ejemplo,
@@ -414,7 +408,7 @@ los roles de idioma nativo.
 - **Otro texto / Different Text** solo cambia el texto actual del catálogo. No
   salta el turno del lector ni añade una lectura completada a las estadísticas.
 - Para forzar el fin del turno de una persona ausente, pulsa el botón separado
-  **Votar para saltar / Vote to skip reader**. El panel de la cola muestra el recuento.
+  **Votar para saltar el turno / Vote to skip the turn**. El panel de la cola muestra el recuento.
   Deben votar exactamente tres
   lectores distintos que estén en la cola y que no sean el lector actual. Cada
   persona puede votar una sola vez por turno y el requisito de tres votos no se
@@ -435,14 +429,10 @@ nuevo. Si la cola queda vacía, la sesión termina.
 
 El panel de la cola muestra:
 
-- puestos numerados según los próximos turnos: `1` es el lector actual, `2` es
-  el siguiente y los demás números siguen el orden de rotación
-- `turns`: la cantidad de lecturas que completaste normalmente durante tu
-  ventana actual de estadísticas
-- `avg reading time`: el promedio de las lecturas completadas en esa misma
-  ventana, en formato `MM:SS`
-- `n/a`: actualmente no tienes una lectura completada dentro de una ventana
-  activa de estadísticas
+- `En cola / In the queue` muestra el orden de los lectores antes de empezar.
+- `Siguientes / Up next` muestra quiénes van después del lector actual, a partir del puesto 2.
+- `turnos / turns` indica cuántas lecturas completaste en tu período de estadísticas actual.
+- `prom. / avg.` muestra la duración media de esas lecturas en formato `MM:SS`. Aparece cuando ya has completado al menos una lectura.
 
 El tiempo comienza cuando el bot publica el texto elegido y termina cuando el
 lector actual pulsa **Pass Turn**. La lectura recién completada y las
@@ -450,9 +440,9 @@ estadísticas actualizadas aparecerán en el panel nuevo del siguiente turno.
 
 Cada persona tiene una ventana de estadísticas independiente. Una lectura
 completada normalmente la inicia o la prolonga durante seis horas desde esa
-lectura. Después de exactamente seis horas sin otra lectura completada, ambos
-valores vuelven a `n/a` en la siguiente actualización de la cola; la próxima
-lectura completada comienza otra vez en `turns: 1`. Unirse, salir, iniciar una
+lectura. Después de exactamente seis horas sin completar otra lectura, la próxima
+actualización de la cola muestra cero turnos y oculta el promedio. Cuando completes
+otra lectura, el contador volverá a uno. Unirse, salir, iniciar una
 cola, pasar antes de publicar un texto, saltar un turno AFK y los turnos de
 otras personas no prolongan tu ventana. Un panel de Discord ya publicado se
 actualiza la próxima vez que se actualice la cola, no automáticamente al vencer
@@ -469,7 +459,7 @@ la ventana.
 | Ya votaste | Tu voto fue registrado y no puedes enviarlo dos veces. |
 | Un salto AFK no avanza | Se necesitan tres lectores distintos que estén en la cola y no sean el lector actual; el requisito no se reduce. |
 | Aparece una continuación de correcciones | Usa el mensaje de lectura más reciente para añadir correcciones y controlar el turno; los resúmenes anteriores quedan congelados. |
-| El bot no puede leer mi respuesta con correcciones | Responde al mensaje de lectura activo con la mención al responder activada o una @mención explícita del bot actual, o usa **Poner Correcciones / Submit Corrections**. |
+| El bot no puede leer mi respuesta con correcciones | Responde al mensaje de lectura activo con la mención al responder activada o una @mención explícita del bot actual, o usa **Enviar correcciones / Submit corrections**. |
 | Una corrección aparece en la lista, pero no se destaca nada | El bot no encontró una coincidencia exacta o difusa suficientemente clara. La corrección se guardó igualmente para que el lector pueda revisarla. |
 | No queda ningún texto sin usar en ese nivel | Elige otro nivel o proporciona tu propio texto; el bot no repetirá un texto para ti durante la misma sesión de sala. |
 | Las opciones del catálogo fallan en Other Languages | Usa **Your own text** e indica el nombre del idioma. |

@@ -215,7 +215,7 @@ class TextPickerView(discord.ui.View):
         await self.controller.handle_pass(interaction)
 
     @discord.ui.button(
-        label="Saltar turno ausente / Skip AFK Turn",
+        label="Votar para saltar el turno / Vote to skip the turn",
         style=discord.ButtonStyle.secondary,
         custom_id="skip_afk_select",
         row=2,
@@ -249,7 +249,7 @@ class ReadingView(discord.ui.View):
                     break
 
     @discord.ui.button(
-        label="Poner Correcciones / Submit Corrections",
+        label="Enviar correcciones / Submit corrections",
         style=discord.ButtonStyle.success,
         custom_id="submit_correction",
         row=0,
@@ -288,7 +288,7 @@ class ReadingView(discord.ui.View):
         await self.controller.handle_pass(interaction)
 
     @discord.ui.button(
-        label="Saltar turno ausente / Skip AFK Turn",
+        label="Votar para saltar el turno / Vote to skip the turn",
         style=discord.ButtonStyle.secondary,
         custom_id="skip_afk_reading",
         row=0,
@@ -419,7 +419,7 @@ class CorrectionModal(discord.ui.Modal):
             style=discord.TextStyle.paragraph,
             custom_id="correction_lines",
             placeholder=(
-                "Separa con comas o líneas. / Separate with commas or lines."
+                "Separa las correcciones con comas o saltos de línea. / Use commas or line breaks."
             ),
             min_length=1,
             max_length=1_000,

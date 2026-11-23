@@ -163,13 +163,13 @@ def test_picker_and_reading_render_exact_text_and_highlights() -> None:
     )
 
     corrections = build_corrections_embed(reading)
-    assert corrections.title == "Correcciones / Corrections : 3"
+    assert corrections.title == "Correcciones / Corrections: 3"
     assert corrections.description == (
-        "<@20> suggests:\n"
+        "<@20> sugiere / suggests:\n"
         "**however**\n"
         "**abducted**\n"
         "\n"
-        "<@30> suggests:\n"
+        "<@30> sugiere / suggests:\n"
         "~~abducted~~\n"
         "**not present**"
     )
@@ -218,11 +218,11 @@ def test_duplicate_correction_uses_strikethrough_without_bold() -> None:
     )
 
     embed = build_corrections_embed(reading)
-    assert embed.title == "Correcciones / Corrections : 1"
+    assert embed.title == "Correcciones / Corrections: 1"
     assert embed.description == (
-        "<@20> suggests:\n"
+        "<@20> sugiere / suggests:\n"
         "**New York**\n\n"
-        "<@30> suggests:\n"
+        "<@30> sugiere / suggests:\n"
         "~~new york~~"
     )
     assert "**~~new york~~**" not in embed.description
@@ -253,9 +253,9 @@ def test_correction_embed_renders_only_current_groups_after_archive() -> None:
 
     embed = build_corrections_embed(reading)
 
-    assert embed.title == "Correcciones / Corrections : 3"
+    assert embed.title == "Correcciones / Corrections: 3"
     assert embed.description == (
-        "<@30> suggests:\n"
+        "<@30> sugiere / suggests:\n"
         "~~alpha~~\n"
         "**beta**"
     )
@@ -341,9 +341,9 @@ def test_duplicate_correction_does_not_strike_parenthetical_comment() -> None:
 
     embed = build_corrections_embed(reading)
     assert embed.description == (
-        "<@20> suggests:\n"
+        "<@20> sugiere / suggests:\n"
         "**Houston**\n\n"
-        "<@30> suggests:\n"
+        "<@30> sugiere / suggests:\n"
         "~~Houston~~ (not Ustin)"
     )
 
@@ -375,9 +375,9 @@ def test_annotations_and_custom_emojis_are_preserved_while_targets_highlight() -
         "** **"
     )
     embed = build_corrections_embed(reading)
-    assert embed.title == "Correcciones / Corrections : 3"
+    assert embed.title == "Correcciones / Corrections: 3"
     assert embed.description == (
-        "<@20> suggests:\n"
+        "<@20> sugiere / suggests:\n"
         "**produce** (noun)\n"
         "(apple <:peepo_Pray:922638020035883058>)\n"
         "(venga venga, tú puedes! :whatCat:)"
@@ -403,7 +403,7 @@ def test_trailing_parenthetical_correction_annotation_is_not_bold() -> None:
 
     embed = build_corrections_embed(reading)
     assert embed.description == (
-        "<@20> suggests:\n"
+        "<@20> sugiere / suggests:\n"
         "**Biblioteca** (estrés)\n"
         "**Sábado** (acento)"
     )
@@ -431,7 +431,7 @@ def test_correction_markdown_renders_but_mentions_remain_escaped() -> None:
 
     embed = build_corrections_embed(reading)
     assert embed.description == (
-        "<@20> suggests:\n"
+        "<@20> sugiere / suggests:\n"
         "**esper__ó__** (tilde)\n"
         "**mira__d__a (**d**) @\u200beveryone "
         "<@\u200b123456789012345678>**"
@@ -482,7 +482,7 @@ async def test_persistent_views_match_button_contract() -> None:
         ),
         ("Pasar Turno / Pass Turn", "pass_select", 4, 2),
         (
-            "Saltar turno ausente / Skip AFK Turn",
+            "Votar para saltar el turno / Vote to skip the turn",
             "skip_afk_select",
             2,
             2,
@@ -490,11 +490,11 @@ async def test_persistent_views_match_button_contract() -> None:
     ]
     assert reading.timeout is None
     assert _button_contract(reading) == [
-        ("Poner Correcciones / Submit Corrections", "submit_correction", 3, 0),
+        ("Enviar correcciones / Submit corrections", "submit_correction", 3, 0),
         ("Otro texto / Different Text", "different_catalog_text", 1, 0),
         ("Pasar turno / Pass Turn", "pass_reading", 4, 0),
         (
-            "Saltar turno ausente / Skip AFK Turn",
+            "Votar para saltar el turno / Vote to skip the turn",
             "skip_afk_reading",
             2,
             0,

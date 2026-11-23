@@ -512,12 +512,12 @@ class LecturaController:
                     "Responde de nuevo al mensaje de lectura con la mención "
                     "al responder activada (@ ON), o mencióname explícitamente, "
                     "e incluye tus correcciones. También puedes usar el botón "
-                    "**Poner Correcciones / Submit Corrections**.\n"
+                    "**Enviar correcciones / Submit corrections**.\n"
                     "I couldn't read any correction text in your reply. "
                     "Reply to the reading message again with ping on reply "
                     "enabled (@ ON), or explicitly @mention me, and include "
                     "your corrections. You can also use the "
-                    "**Poner Correcciones / Submit Corrections** button.",
+                    "**Enviar correcciones / Submit corrections** button.",
                     allowed_mentions=discord.AllowedMentions.none(),
                     mention_author=False,
                 )
