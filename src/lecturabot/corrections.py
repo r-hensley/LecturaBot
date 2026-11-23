@@ -14,11 +14,20 @@ _CUSTOM_EMOJI_MARKUP = re.compile(
 )
 _WORD_TOKEN = re.compile(r"[^\W_]+(?:[\u2019'][^\W_]+)*", re.UNICODE)
 _INLINE_MARKDOWN_MARKER = re.compile(r"[_\\~|*`]")
+_REPLY_URL = re.compile(r"(?:https?://|www\.)[^\s<>]+", re.IGNORECASE)
+# These emoji contain characters that would otherwise match _WORD_TOKEN.
+_WORD_LIKE_EMOJI = re.compile(r"[0-9]\ufe0f?\u20e3|ℹ\ufe0f?")
 
 _MIN_FUZZY_SIMILARITY = 0.82
 _MIN_FUZZY_MARGIN = 0.06
 _MIN_SINGLE_WORD_FUZZY_LENGTH = 5
 _MIN_PHRASE_FUZZY_LENGTH = 8
+
+
+def has_correction_reply_text(content: str) -> bool:
+    without_urls = _REPLY_URL.sub(" ", content)
+    without_custom_emoji = _remove_custom_emoji_markup(without_urls)
+    return _WORD_TOKEN.search(_WORD_LIKE_EMOJI.sub(" ", without_custom_emoji)) is not None
 
 
 def split_correction_items(raw_value: str) -> list[str]:

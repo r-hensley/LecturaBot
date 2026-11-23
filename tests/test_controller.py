@@ -267,6 +267,8 @@ class _ReplyMessage:
     def __init__(self, author: _ReplyMember, content: str) -> None:
         self.author = author
         self.content = content
+        self.attachments: list[object] = []
+        self.stickers: list[object] = []
         self.reference = type("Reference", (), {"message_id": 700})()
         self.guild = type("Guild", (), {"id": 1})()
         self.channel = type("Channel", (), {"id": 101})()
@@ -777,6 +779,7 @@ def correction_reply_context(
             ["produce (noun)", "(stress, keep trying :peepoPray:)"],
         ),
         (f"<@{BOT_USER_ID}> apple", ["apple"]),
+        ("árbol 🍎 (https://example.com)", ["árbol 🍎 (https://example.com)"]),
         (f"apple <@!{BOT_USER_ID}>", ["apple"]),
         (
             f"<@{BOT_USER_ID}>an<@!{BOT_USER_ID}>apple<@{BOT_USER_ID}>",
@@ -791,6 +794,7 @@ def correction_reply_context(
     ids=[
         "reply-ping",
         "mention",
+        "text-with-emoji-and-link",
         "nickname-mention",
         "adjacent-mentions",
         "length-limit",
@@ -838,14 +842,46 @@ async def test_unreadable_or_empty_reply_gets_guidance_without_saving(
     assert refreshed == []
     assert len(reply.reply_calls) == 1
     guidance, kwargs = reply.reply_calls[0]
-    assert "correction" in guidance.lower()
-    assert "correcci" in guidance.lower()
+    spanish, english = guidance.splitlines()
+    assert spanish.startswith("- No pude leer ninguna corrección")
+    assert english.startswith("- I couldn't read any correction text")
     assert "ON" in guidance
     assert kwargs["mention_author"] is False
     assert (
         kwargs["allowed_mentions"].to_dict()
         == discord.AllowedMentions.none().to_dict()
     )
+
+
+@pytest.mark.parametrize(
+    ("content", "media_field"),
+    [
+        ("", "attachments"),
+        (f"<@{BOT_USER_ID}>", "attachments"),
+        ("", "stickers"),
+        ("👍🏽 1️⃣ ℹ️", None),
+        ("<:apple:123> <a:party:456> :apple:", None),
+        ("https://example.com/gif", None),
+        ("ℹwww.example.com/gif", None),
+        (f"<@{BOT_USER_ID}> 🍎 ||<https://example.com/gif>||", None),
+    ],
+)
+@pytest.mark.asyncio
+async def test_non_text_reply_gets_neither_guidance_nor_correction(
+    correction_reply_context: _CorrectionReplyContext,
+    content: str,
+    media_field: str | None,
+) -> None:
+    controller, service, reply, refreshed = correction_reply_context
+    reply.content = content
+    if media_field is not None:
+        getattr(reply, media_field).append(object())
+
+    await controller.handle_reply(reply)  # type: ignore[arg-type]
+
+    assert reply.reply_calls == []
+    assert service.add_calls == []
+    assert refreshed == []
 
 
 @pytest.mark.parametrize("content", ["", "apple"], ids=["redacted", "visible"])

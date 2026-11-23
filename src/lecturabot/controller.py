@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 import discord
 
 from .config import BotConfig, ChannelPairConfig
+from .corrections import has_correction_reply_text
 from .models import (
     ActiveReading,
     ChannelMode,
@@ -507,13 +508,15 @@ class LecturaController:
                 for mention in (f"<@{bot_user.id}>", f"<@!{bot_user.id}>"):
                     content = content.replace(mention, " ")
             if not content.strip():
+                if message.attachments or message.stickers:
+                    return
                 await message.reply(
-                    "No pude leer ninguna corrección en tu respuesta. "
+                    "- No pude leer ninguna corrección en tu respuesta. "
                     "Responde de nuevo al mensaje de lectura con la mención "
                     "al responder activada (@ ON), o mencióname explícitamente, "
                     "e incluye tus correcciones. También puedes usar el botón "
                     "**Enviar correcciones / Submit corrections**.\n"
-                    "I couldn't read any correction text in your reply. "
+                    "- I couldn't read any correction text in your reply. "
                     "Reply to the reading message again with ping on reply "
                     "enabled (@ ON), or explicitly @mention me, and include "
                     "your corrections. You can also use the "
@@ -521,6 +524,8 @@ class LecturaController:
                     allowed_mentions=discord.AllowedMentions.none(),
                     mention_author=False,
                 )
+                return
+            if not has_correction_reply_text(content):
                 return
             items = parse_correction_lines(content)
             async with self._ui_lock_for(state.text_channel_id):

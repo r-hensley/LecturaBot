@@ -123,6 +123,8 @@ with no readable text, it sends a reminder in English and Spanish to enable the
 reply ping, explicitly mention it in your reply, or use **Enviar correcciones / Submit corrections**. The correction form and
 custom reading form work without
 a mention.
+The bot skips replies it can see contain only attachments, stickers, emojis,
+or links.
 
 Only commas outside parentheses separate entries. For example,
 `vegetables, produce (noun), baked` is three corrections, while a comma inside
@@ -354,6 +356,8 @@ sin texto que pueda leer, envía un recordatorio en español e inglés para que
 actives la mención al responder, lo menciones explícitamente en la respuesta o
 uses **Enviar correcciones / Submit corrections**. Los formularios de correcciones
 y de texto propio funcionan sin mencionar al bot.
+El bot omite las respuestas que solo contienen archivos adjuntos, stickers,
+emojis o enlaces cuando Discord le permite ver el contenido.
 
 Solo las comas que estén fuera de paréntesis separan entradas. Por ejemplo,
 `vegetables, produce (sustantivo), baked` contiene tres correcciones, mientras
