@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from pathlib import Path
+from stat import S_IMODE
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
 
 from lecturabot.bot import FEATURES_EXTENSION, LecturaBot, MaintenanceCog
+from lecturabot.bot_control import BotControl, send_request
 from lecturabot.features import LecturaCog, SettingsView
 from lecturabot.config import BotConfig
 from lecturabot.repository import SQLiteRepository
@@ -104,6 +106,48 @@ async def test_owner_can_reload_and_sync_in_configured_scope(
 
         await sync.callback(maintenance, interaction)
         publish.assert_awaited_once_with(guild=bot.command_guild)
+
+
+async def test_private_socket_reloads_features_and_keeps_session_state(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path = tmp_path / "control" / "bot.sock"
+    monkeypatch.setenv("LECTURABOT_CONTROL_SOCKET", str(path))
+    bot = LecturaBot(
+        BotConfig(
+            token="test-token",
+            guild_id=1,
+            bot_status_contact_user_id=900,
+            issue_contact_user_id=901,
+            database_path=tmp_path / "test.sqlite3",
+            channel_pairs=(),
+        )
+    )
+    sync = AsyncMock(return_value=0)
+    monkeypatch.setattr(bot, "sync_app_commands", sync)
+    async with bot:
+        await bot.setup_hook()
+        original = bot.get_cog("LecturaCog")
+        assert original is not None
+        controller = bot.controller
+        assert S_IMODE(path.parent.stat().st_mode) == 0o700
+        assert S_IMODE(path.stat().st_mode) == 0o600
+
+        duplicate = BotControl(path, features_loaded=lambda: False, reload_features=bot.reload_features)
+        with pytest.raises(OSError):
+            await duplicate.start()
+        await duplicate.close()
+        assert await send_request(path, "status", []) == {"ok": True, "loaded": ["features"]}
+
+        for action, targets in (("reload", ["lecturabot.controller"]), ("unload", ["features"])):
+            assert not (await send_request(path, action, targets))["ok"]
+        assert bot.get_cog("LecturaCog") is original
+
+        assert await send_request(path, "reload", ["features"]) == {"ok": True, "completed": ["features"]}
+        assert bot.get_cog("LecturaCog") is not original
+        assert bot.get_cog("LecturaCog").controller is controller
+        sync.assert_awaited_once()
+    assert not path.exists()
 
 
 @pytest.mark.asyncio

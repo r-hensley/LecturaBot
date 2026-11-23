@@ -137,6 +137,36 @@ Reload keeps active reading sessions and voice timers in memory. Changes to
 the controller, service, persistent queue views, dependencies, or startup
 configuration still require a restart.
 
+### Reload features from the bot host
+
+Agents with shell access as the service user can use a private Unix socket
+to inspect or reload `lecturabot.features`. Enable it once with a systemd
+override for `lecturabot.service`:
+
+```ini
+[Service]
+RuntimeDirectory=lecturabot-control
+RuntimeDirectoryMode=0700
+Environment=LECTURABOT_CONTROL_SOCKET=/run/lecturabot-control/control.sock
+KillSignal=SIGINT
+```
+
+After installing the updated code and restarting the service once, run from
+the deployed checkout as the bot's OS user:
+
+```bash
+.venv/bin/python src/lecturabot/bot_control.py \
+  --socket /run/lecturabot-control/control.sock status
+.venv/bin/python src/lecturabot/bot_control.py \
+  --socket /run/lecturabot-control/control.sock reload features
+```
+
+Check `status` first. Reload the code already present on the host and check
+the JSON reply before continuing. A failed or timed-out reload calls for
+checking the service log before retrying. The socket uses a private directory
+and mode `0600`. For a manual socket path outside the systemd runtime
+directory, remove a stale socket only after confirming the bot has stopped.
+
 ## Reading catalog
 
 LecturaBot uses a bundled catalog and does not contact Google Docs while

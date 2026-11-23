@@ -106,6 +106,31 @@ def _assert_error(error: pytest.ExceptionInfo[SessionError], code: str) -> None:
     assert error.value.code == code
 
 
+async def test_combined_panel_owns_picker_and_reading_turn_actions(tmp_path: Path) -> None:
+    service, _, _ = await _make_service(tmp_path)
+    await _join(service, 10, 20)
+    await service.start(text_channel_id=101, actor_id=10)
+    await service.set_picker_message(text_channel_id=101, reader_id=10, message_id=444)
+    combined = await service.set_queue_message(101, 555)
+    assert combined.queue_message_id == combined.picker_message_id == 555
+
+    reading = dict(
+        text_channel_id=101, reader_id=10, language=Language.ENGLISH, level=Level.BEGINNER
+    )
+    with pytest.raises(SessionError) as stale:
+        await service.begin_catalog_reading(picker_message_id=444, **reading)
+    _assert_error(stale, "stale_picker")
+    await service.begin_catalog_reading(picker_message_id=555, **reading)
+    await service.set_reading_message(text_channel_id=101, reader_id=10, message_id=666)
+
+    vote = await service.vote_to_skip(text_channel_id=101, voter_id=20, source_message_id=555)
+    assert vote.vote_count == 1
+    advanced = await service.pass_turn(text_channel_id=101, actor_id=10, source_message_id=555)
+    assert advanced.state.current_user_id == 20
+    assert advanced.retired_reading_message_id == 666
+    assert advanced.state.picker_message_id is None
+
+
 def test_correction_parser_splits_top_level_commas_and_newlines() -> None:
     assert parse_correction_lines(
         "vegetables, looking, produce (noun), baked, performances, variety,"

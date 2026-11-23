@@ -16,8 +16,8 @@ corrections, and reading-time statistics.
 2. Open the text channel with the same room number.
 3. Type `/queue` in that text channel.
 4. Use the new queue panel that appears in the channel and click
-   **Unirse / Enter**.
-5. Click **Comenzar Lectura / Start Reading**. You can begin by yourself or
+   **Unirse / Join**.
+5. Click **Comenzar / Start**. You can begin by yourself or
    wait for more readers to join.
 6. When the bot mentions you, choose a language and level or submit your own
    text.
@@ -35,7 +35,7 @@ The voice and text channels must match. For example, use the text channel for
 Lectura 2 while connected to the Lectura 2 voice channel.
 
 If you disconnect, reconnect to the same voice channel within the server's
-grace period (five minutes by default) to keep your place without pressing **Enter** again. After the grace period, or
+grace period (five minutes by default) to keep your place without pressing **Join** again. After the grace period, or
 if you move directly to another voice channel, the bot removes you. You
 lose your position and must join again at the end. The bot updates the active
 queue panel in place without posting it again. If the current reader leaves,
@@ -46,10 +46,10 @@ a fresh panel for that new turn.
 
 | Control | What it does |
 | --- | --- |
-| **Unirse / Enter** | Adds you to the end of the reader queue. |
+| **Unirse / Join** | Adds you to the end of the reader queue. |
 | **Salir / Leave** | Removes you from the queue. |
-| **Instrucciones / Instructions** | Shows a short private reminder of the workflow. |
-| **Comenzar Lectura / Start Reading** | Starts the rotation with one or more queued participants. |
+| **? Ayuda / Help** | Shows instructions and support contacts in a private reply. |
+| **Comenzar / Start** | Starts the rotation with one or more queued participants. |
 
 `/queue` publishes a fresh public queue panel in the channel. Running it again
 replaces the previous panel instead of creating a separate session. `/cola`
@@ -63,9 +63,9 @@ ends; the next person to enter starts a new room session.
 
 ### Choose what to read
 
-When it is your turn, the bot mentions you and displays the text picker.
+When it is your turn, the bot mentions you and displays the picker in the queue panel.
 
-Catalog choices are available in both languages:
+The **Catálogo / Catalog** menu combines language and level:
 
 - **Español Principiante**, **Español Intermedio**, or **Español Avanzado**
 - **English Beginner**, **English Intermediate**, or **English Advanced**
@@ -89,16 +89,12 @@ history so it cannot immediately return. This restarts the reading timer but
 does not advance your turn or count as a completed reading. The button is not
 shown for a passage you supplied yourself.
 
-To bring your own passage, choose one of these instead:
-
-- **Tu propio texto / Your own text - Español**
-- **Tu propio texto / Your own text - English**
-
-Paste the passage into the form and submit it. Custom passages are used only
+To bring your own passage, click **Tu propio texto / Use your own text**.
+Choose the language, paste the passage, and submit the form. Custom passages are used only
 for that turn and are not added to the shared catalog. A custom passage can
 contain up to 1,600 characters.
 
-In the **Other Languages** room, use **Your own text** and enter the language
+In the **Other Languages** room, use **Use your own text** and enter the language
 name when prompted. Catalog texts are only available in the standard
 English-Spanish rooms.
 
@@ -186,8 +182,9 @@ verify native-language roles.
   added to that reader's statistics.
 - **Otro texto / Different Text** changes only the current catalog passage. It
   does not skip the reader's turn or add a completed reading to statistics.
-- To force an absent reader's turn to end, use the separate **Saltar turno
-  ausente / Skip AFK Turn** button. Exactly three different queued,
+- To force an absent reader's turn to end, use the separate **Votar para
+  saltar / Vote to skip reader** button. The queue panel shows the vote count.
+  Exactly three different queued,
   non-current readers must vote. A person can vote only once per turn, and the
   three-vote requirement is not reduced when fewer eligible voters are
   present.
@@ -237,7 +234,7 @@ itself at the expiry time.
 | Join the matching voice channel first | Move to the voice channel paired with the current text channel. |
 | This queue panel is no longer active | Run `/queue` again and use the new queue panel. |
 | That picker, reading, or turn is no longer active | Use the newest message for the current reader. |
-| You are already in the queue | Continue waiting; do not press Enter again. |
+| You are already in the queue | Continue waiting; do not press Join again. |
 | You already voted | Your skip vote was recorded and cannot be submitted twice. |
 | An AFK skip does not advance | Three different queued, non-current readers are required; the threshold is not reduced. |
 | A correction continuation appears | Use the newest reading message for additional corrections and turn controls; earlier summaries are frozen history. |
@@ -246,9 +243,7 @@ itself at the expiry time.
 | No unused catalog text remains at this level | Choose another level or submit your own text; the bot will not repeat a passage for you in the same room session. |
 | Catalog choices fail in Other Languages | Use **Your own text** and provide the language name. |
 
-Queue panels identify separate contacts for **Bot not working?** and **Found a
-bug or text issue?**. Use the first for availability problems and the second for
-behavior or reading-text problems.
+**? Ayuda / Help** shows separate contacts for bot availability and for bugs or reading texts.
 
 ## Español
 
@@ -258,8 +253,8 @@ behavior or reading-text problems.
 2. Abre el canal de texto que tenga el mismo número.
 3. Escribe `/cola` en ese canal de texto.
 4. Usa el panel nuevo de la cola que aparece en el canal y pulsa
-   **Unirse / Enter**.
-5. Pulsa **Comenzar Lectura / Start Reading**. Puedes comenzar a solas o
+   **Unirse / Join**.
+5. Pulsa **Comenzar / Start**. Puedes comenzar a solas o
    esperar a que se unan más lectores.
 6. Cuando el bot te mencione, elige un idioma y nivel o proporciona tu propio
    texto.
@@ -287,10 +282,10 @@ panel nuevo para ese turno.
 
 | Control | Función |
 | --- | --- |
-| **Unirse / Enter** | Te añade al final de la cola de lectores. |
+| **Unirse / Join** | Te añade al final de la cola de lectores. |
 | **Salir / Leave** | Te quita de la cola. |
-| **Instrucciones / Instructions** | Muestra en privado un recordatorio breve del proceso. |
-| **Comenzar Lectura / Start Reading** | Comienza la rotación con una o más personas en la cola. |
+| **? Ayuda / Help** | Muestra las instrucciones y los contactos de soporte en privado. |
+| **Comenzar / Start** | Comienza la rotación con una o más personas en la cola. |
 
 `/cola` publica un panel nuevo y público de la cola en el canal. Volver a
 ejecutarlo reemplaza el panel anterior; no crea una sesión separada. `/queue`
@@ -305,9 +300,9 @@ sala.
 
 ### Elige qué leer
 
-Cuando sea tu turno, el bot te mencionará y mostrará el selector de textos.
+Cuando sea tu turno, el bot te mencionará y mostrará el selector de textos en el panel de la cola.
 
-El catálogo ofrece tres niveles en ambos idiomas:
+El menú **Catálogo / Catalog** combina el idioma y el nivel:
 
 - **Español Principiante**, **Español Intermedio** o **Español Avanzado**
 - **English Beginner**, **English Intermediate** o **English Advanced**
@@ -324,16 +319,12 @@ la sesión de la sala. Si agotas todos los textos de un idioma y nivel, el bot n
 vuelve a empezar la lista: elige otro nivel o proporciona tu propio texto. El
 historial solo se reinicia cuando la cola queda vacía y termina la sesión.
 
-Para usar tu propio texto, elige:
-
-- **Tu propio texto / Your own text - Español**
-- **Tu propio texto / Your own text - English**
-
-Pega el texto en el formulario y envíalo. Los textos propios solo se usan
+Para usar tu propio texto, pulsa **Tu propio texto / Use your own text**.
+Elige el idioma, pega el texto y envía el formulario. Los textos propios solo se usan
 durante ese turno y no se añaden al catálogo compartido. Un texto propio puede
 tener hasta 1.600 caracteres.
 
-En la sala **Other Languages**, usa **Your own text** e indica el nombre del
+En la sala **Other Languages**, usa **Use your own text** e indica el nombre del
 idioma cuando el bot lo pida. El catálogo solo está disponible en las salas
 normales de inglés y español.
 
@@ -423,7 +414,8 @@ los roles de idioma nativo.
 - **Otro texto / Different Text** solo cambia el texto actual del catálogo. No
   salta el turno del lector ni añade una lectura completada a las estadísticas.
 - Para forzar el fin del turno de una persona ausente, pulsa el botón separado
-  **Saltar turno ausente / Skip AFK Turn**. Deben votar exactamente tres
+  **Votar para saltar / Vote to skip reader**. El panel de la cola muestra el recuento.
+  Deben votar exactamente tres
   lectores distintos que estén en la cola y que no sean el lector actual. Cada
   persona puede votar una sola vez por turno y el requisito de tres votos no se
   reduce cuando haya menos votantes disponibles.
@@ -482,6 +474,5 @@ la ventana.
 | No queda ningún texto sin usar en ese nivel | Elige otro nivel o proporciona tu propio texto; el bot no repetirá un texto para ti durante la misma sesión de sala. |
 | Las opciones del catálogo fallan en Other Languages | Usa **Your own text** e indica el nombre del idioma. |
 
-Los paneles de la cola muestran contactos distintos para **Bot not working?** y
-**Found a bug or text issue?**. Usa el primero si el bot no está disponible y el
-segundo para problemas de comportamiento o de los textos.
+**? Ayuda / Help** muestra contactos distintos para problemas de disponibilidad
+del bot y para errores o problemas con los textos.

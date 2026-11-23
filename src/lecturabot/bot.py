@@ -4,14 +4,18 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from importlib import resources
+from pathlib import Path
 
 import discord
 from discord import app_commands
 from discord.ext import commands
 
+from .bot_control import BotControl
 from .config import BotConfig
 from .controller import LecturaController
+from .queue_panel import QueuePanel
 from .repository import SQLiteRepository
 from .service import SessionService
 from .views import QueueView, ReadingView, TextPickerView
@@ -27,7 +31,6 @@ class MaintenanceCog(commands.Cog):
 
     def __init__(self, bot: LecturaBot) -> None:
         self.bot = bot
-        self._lock = asyncio.Lock()
 
     async def _begin(self, interaction: discord.Interaction) -> bool:
         await interaction.response.defer(ephemeral=True, thinking=True)
@@ -42,14 +45,13 @@ class MaintenanceCog(commands.Cog):
     async def reload(self, interaction: discord.Interaction) -> None:
         if not await self._begin(interaction):
             return
-        async with self._lock:
-            try:
-                await self.bot.reload_extension(FEATURES_EXTENSION)
-            except commands.ExtensionError:
-                LOGGER.exception("feature reload failed")
-                message = "Reload failed. Check the bot log for details."
-            else:
-                message = "Reading features reloaded. Use `/sync` if slash command definitions changed."
+        try:
+            await self.bot.reload_features()
+        except commands.ExtensionError:
+            LOGGER.exception("feature reload failed")
+            message = "Reload failed. Check the bot log for details."
+        else:
+            message = "Reading features reloaded. Use `/sync` if slash command definitions changed."
         await interaction.edit_original_response(content=message)
 
     @app_commands.command(name="sync", description="Publish LecturaBot's slash command definitions.")
@@ -58,7 +60,7 @@ class MaintenanceCog(commands.Cog):
     async def sync(self, interaction: discord.Interaction) -> None:
         if not await self._begin(interaction):
             return
-        async with self._lock:
+        async with self.bot._maintenance_lock:
             try:
                 count = await self.bot.sync_app_commands()
             except discord.HTTPException:
@@ -100,7 +102,9 @@ class LecturaBot(commands.Bot):
         )
         self._reconciled = False
         self._reconcile_lock = asyncio.Lock()
+        self._maintenance_lock = asyncio.Lock()
         self._restart_notice_rooms: set[int] = set()
+        self._control: BotControl | None = None
 
     async def setup_hook(self) -> None:
         await self.repository.initialize()
@@ -128,6 +132,7 @@ class LecturaBot(commands.Bot):
         await self.load_extension(FEATURES_EXTENSION)
         self.add_view(QueueView(self.controller))
         self.add_view(TextPickerView(self.controller))
+        self.add_view(QueuePanel(self.controller))
         self.add_view(ReadingView(self.controller))
 
         if self.command_guild is not None:
@@ -138,6 +143,31 @@ class LecturaBot(commands.Bot):
                 len(removed_global),
             )
         await self.sync_app_commands()
+        if socket_path := os.environ.get("LECTURABOT_CONTROL_SOCKET"):
+            control = BotControl(
+                Path(socket_path),
+                features_loaded=lambda: FEATURES_EXTENSION in self.extensions,
+                reload_features=self.reload_features,
+            )
+            try:
+                await control.start()
+            except (OSError, ValueError, NotImplementedError):
+                LOGGER.exception("Could not start the local bot control socket")
+            else:
+                self._control = control
+                LOGGER.info("Local bot control ready at %s", control.path)
+
+    async def reload_features(self) -> None:
+        async with self._maintenance_lock:
+            await self.reload_extension(FEATURES_EXTENSION)
+        LOGGER.info("Reloaded %s", FEATURES_EXTENSION)
+
+    async def close(self) -> None:
+        try:
+            if self._control is not None:
+                await self._control.close()
+        finally:
+            await super().close()
 
     async def sync_app_commands(self) -> int:
         synced = await self.tree.sync(guild=self.command_guild)

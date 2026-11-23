@@ -274,11 +274,10 @@ def build_instructions_embed() -> discord.Embed:
         description=(
             "1. Únete al canal de voz correspondiente y entra en la cola. / "
             "Join the matching voice channel and enter the queue.\n"
-            "2. Cuando estés listo, pulsa **Comenzar Lectura / Start "
-            "Reading**; puedes empezar solo. / When ready, press **Start "
-            "Reading**; you can start by yourself.\n"
-            "3. Cuando sea tu turno, elige un texto o proporciona el tuyo. / "
-            "When it is your turn, choose a text or provide your own.\n"
+            "2. Cuando estés listo, pulsa **Comenzar**; puedes empezar solo. / "
+            "When ready, press **Start**; you can start by yourself.\n"
+            "3. Cuando sea tu turno, elige un texto del catálogo o pulsa **Tu propio texto** en la cola. / "
+            "When it is your turn, choose a catalog passage or press **Use your own text** in the queue.\n"
             "4. Los demás pueden usar **Poner Correcciones / Submit "
             "Corrections**, o responder al mensaje de lectura con la mención "
             "al responder activada (@ ON) o mencionando al bot. / Others can "
@@ -289,8 +288,7 @@ def build_instructions_embed() -> discord.Embed:
             "Turn** después de revisar las correcciones. / Only the current "
             "reader can pass after reviewing the corrections.\n"
             "6. Si el lector está ausente, tres participantes distintos en "
-            "la cola pueden pulsar **Saltar turno ausente / Skip AFK Turn**. "
-            "/ If the reader is AFK, three different queued participants can "
-            "press **Skip AFK Turn**."
+            "la cola pueden pulsar **Votar para saltar**. / If the reader is AFK, "
+            "three different queued participants can press **Vote to skip reader**."
         ),
     )

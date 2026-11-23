@@ -240,6 +240,8 @@ class SessionService:
                 self._require_state(await self._load_locked(text_channel_id))
             )
             state.queue_message_id = message_id
+            if state.phase is SessionPhase.SELECTING:
+                state.picker_message_id = message_id
             await self._persist_locked(state)
             return self._snapshot(state)
 
@@ -985,7 +987,10 @@ class SessionService:
                 else state.active_reading.message_id
             )
         )
-        if expected_message_id != source_message_id:
+        valid_sources = {expected_message_id}
+        if state.phase is SessionPhase.READING and expected_message_id is not None:
+            valid_sources.add(state.queue_message_id)
+        if source_message_id not in valid_sources:
             raise SessionError(
                 "stale_turn",
                 "Ese turno ya no está activo. / That turn is no longer active.",

@@ -395,9 +395,8 @@ async def test_restart_notice_only_for_preexisting_nonempty_queue_and_only_once(
 
     panels = {room: AsyncMock() for room in (101, 102)}
     monkeypatch.setattr(bot.controller, "_refresh_queue", AsyncMock(
-        side_effect=lambda state: panels[state.text_channel_id]
+        side_effect=lambda state, **_: panels[state.text_channel_id]
     ))
-    monkeypatch.setattr(bot.controller, "_ensure_picker", AsyncMock())
     send = panels[101].channel.send
     send.side_effect = [RuntimeError("send failed"), None]
 

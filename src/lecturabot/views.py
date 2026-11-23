@@ -310,7 +310,7 @@ class CustomTextModal(discord.ui.Modal):
         *,
         text_channel_id: int,
         picker_message_id: int,
-        language: Language,
+        language: Language | None,
         ask_language: bool,
         max_text_length: int,
     ) -> None:
@@ -319,13 +319,14 @@ class CustomTextModal(discord.ui.Modal):
             # Modal IDs are registered globally by discord.py. Including the
             # picker ID prevents same-language forms opened in two rooms from
             # replacing one another's callback state.
-            custom_id=f"custom_text_modal:{language.value}:{picker_message_id}",
+            custom_id=f"custom_text_modal:{language or 'choose'}:{picker_message_id}",
         )
         self.controller = controller
         self.text_channel_id = text_channel_id
         self.picker_message_id = picker_message_id
         self.language = language
         self.language_input: discord.ui.TextInput | None = None
+        self.language_select: discord.ui.Select | None = None
 
         if ask_language:
             self.language_input = discord.ui.TextInput(
@@ -340,6 +341,17 @@ class CustomTextModal(discord.ui.Modal):
                     component=self.language_input,
                 )
             )
+        elif language is None:
+            self.language_select = discord.ui.Select(
+                custom_id="custom_reading_language",
+                options=[
+                    discord.SelectOption(label="Español", value=Language.SPANISH),
+                    discord.SelectOption(label="English", value=Language.ENGLISH),
+                ],
+            )
+            self.add_item(discord.ui.Label(
+                text="Idioma / Language", component=self.language_select,
+            ))
 
         self.body_input = discord.ui.TextInput(
             style=discord.TextStyle.paragraph,
@@ -351,6 +363,7 @@ class CustomTextModal(discord.ui.Modal):
         self.add_item(
             discord.ui.Label(
                 text="Texto / Text",
+                description=f"Máximo {max_text_length:,} caracteres / Up to {max_text_length:,} characters.",
                 component=self.body_input,
             )
         )
@@ -359,11 +372,21 @@ class CustomTextModal(discord.ui.Modal):
         language_label = (
             None if self.language_input is None else self.language_input.value
         )
+        language = self.language or Language.SPANISH
+        if self.language_select is not None:
+            try:
+                language = Language(self.language_select.values[0])
+            except (IndexError, ValueError):
+                await interaction.response.send_message(
+                    "Selecciona un idioma para tu texto. / Select a language for your passage.",
+                    ephemeral=True,
+                )
+                return
         await self.controller.submit_custom_text(
             interaction,
             text_channel_id=self.text_channel_id,
             picker_message_id=self.picker_message_id,
-            language=self.language,
+            language=language,
             body=self.body_input.value,
             custom_language_label=language_label,
         )

@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
+from unittest.mock import AsyncMock
 
 import discord
 import pytest
@@ -19,9 +20,10 @@ from lecturabot.models import (
     SessionPhase,
     SessionState,
 )
+from lecturabot.queue_panel import QueuePanel
 from lecturabot.rendering import CorrectionSummaryOverflow
 from lecturabot.service import SessionError, Transition
-from lecturabot.views import QueueView, ReadingView
+from lecturabot.views import CustomTextModal, ReadingView
 
 
 BOT_USER_ID = 1234567890123456789
@@ -35,11 +37,14 @@ class _FakeMessage:
         events: list[str],
         *,
         failed_edits: int = 0,
+        v2: bool = False,
     ) -> None:
         self.id = message_id
         self.name = name
         self.events = events
         self.failed_edits = failed_edits
+        self.flags = discord.MessageFlags(components_v2=v2)
+        self.components = []
         self.edit_calls: list[dict[str, Any]] = []
 
     async def edit(self, **kwargs: Any) -> None:
@@ -67,6 +72,12 @@ class _FakeChannel:
     async def send(self, **kwargs: Any) -> _FakeMessage:
         self.events.append("send")
         self.send_calls.append(kwargs)
+        if isinstance(kwargs.get("view"), discord.ui.LayoutView):
+            self.new_message.flags.components_v2 = True
+            self.new_message.components = [
+                discord.components._component_factory(component)
+                for component in kwargs["view"].to_components()
+            ]
         return self.new_message
 
     async def fetch_message(self, message_id: int) -> _FakeMessage:
@@ -80,6 +91,8 @@ class _FakeChannel:
 
 
 class _FakeService:
+    minimum_participants = 1
+    skip_vote_threshold = 3
     def __init__(self, events: list[str], *, fail_persistence: bool = False) -> None:
         self.events = events
         self.fail_persistence = fail_persistence
@@ -308,7 +321,7 @@ def _reading_state() -> SessionState:
 @pytest.mark.asyncio
 async def test_refresh_queue_edits_active_panel_without_resurfacing_it() -> None:
     events: list[str] = []
-    old_message = _FakeMessage(111, "old", events)
+    old_message = _FakeMessage(111, "old", events, v2=True)
     channel = _FakeChannel(
         new_message=_FakeMessage(222, "new", events),
         old_message=old_message,
@@ -330,7 +343,68 @@ async def test_refresh_queue_edits_active_panel_without_resurfacing_it() -> None
     assert service.set_queue_calls == []
     assert events == ["fetch:111", "old.edit"]
     assert len(old_message.edit_calls) == 1
-    assert isinstance(old_message.edit_calls[0]["view"], QueueView)
+    assert isinstance(old_message.edit_calls[0]["view"], QueuePanel)
+
+
+async def test_legacy_selection_migrates_to_one_panel_before_retiring_messages() -> None:
+    events: list[str] = []
+    state = _reading_state()
+    state.phase = SessionPhase.SELECTING
+    state.active_reading = None
+    state.queue_message_id = 111
+    state.picker_message_id = 333
+    channel = _FakeChannel(
+        new_message=_FakeMessage(222, "new", events),
+        old_message=_FakeMessage(111, "old", events),
+        events=events,
+    )
+    controller = _controller(_FakeService(events))
+    controller._text_channel = AsyncMock(return_value=channel)  # type: ignore[method-assign]
+
+    async def retire(_channel_id: int, message_id: int | None) -> None:
+        events.append(f"retire:{message_id}")
+
+    controller._retire_message = retire  # type: ignore[method-assign]
+    await controller._refresh_queue(state)
+
+    assert events == ["fetch:111", "send", "persist", "retire:333", "retire:111"]
+    sent = channel.send_calls[0]
+    assert any(
+        isinstance(item, discord.ui.Select) and item.custom_id == "queue_catalog"
+        for item in sent["view"].walk_children()
+    )
+    assert sent["allowed_mentions"].users is False
+
+
+async def test_compact_menu_routes_the_selected_language_and_level() -> None:
+    state = _reading_state()
+    state.phase = SessionPhase.SELECTING
+    state.active_reading = None
+    controller = _controller(_FakeService([]))
+    controller.handle_catalog_selection = AsyncMock()  # type: ignore[method-assign]
+    panel = QueuePanel(controller, state)
+    menu = next(item for item in panel.walk_children() if isinstance(item, discord.ui.Select))
+    assert [option.value for option in menu.options] == [
+        "es:0", "es:1", "es:2", "en:0", "en:1", "en:2"
+    ]
+    assert panel.is_persistent()
+    menu._values = ["en:1"]
+    interaction = _FakeInteraction(_FakeMessage(222, "panel", []))
+    await menu.callback(interaction)  # type: ignore[arg-type]
+    controller.handle_catalog_selection.assert_awaited_once_with(
+        interaction, language=Language.ENGLISH, level_index=1,
+    )
+
+    state.channel_mode = ChannelMode.CUSTOM_ONLY
+    custom_panel = QueuePanel(controller, state)
+    assert not any(isinstance(item, discord.ui.Select) for item in custom_panel.walk_children())
+    modal = CustomTextModal(
+        controller, text_channel_id=101, picker_message_id=222, language=None,
+        ask_language=False, max_text_length=1600,
+    )
+    assert modal.language_select is not None
+    assert [option.value for option in modal.language_select.options] == ["es", "en"]
+    assert modal.body_input.max_length == 1600
 
 
 @pytest.mark.asyncio
@@ -360,7 +434,7 @@ async def test_repost_queue_persists_new_panel_before_retiring_old_panel() -> No
     assert old_message.edit_calls == [{"view": None}]
     assert new_message.edit_calls == []
     assert len(channel.send_calls) == 1
-    assert isinstance(channel.send_calls[0]["view"], QueueView)
+    assert isinstance(channel.send_calls[0]["view"], QueuePanel)
 
 
 @pytest.mark.asyncio
@@ -386,7 +460,9 @@ async def test_repost_queue_persistence_failure_retires_only_new_panel() -> None
 
     assert service.set_queue_calls == [(101, 222)]
     assert events == ["send", "persist", "new.edit"]
-    assert new_message.edit_calls == [{"view": None}]
+    archived = new_message.edit_calls[0]["view"]
+    assert archived.has_components_v2()
+    assert not any(isinstance(item, discord.ui.ActionRow) for item in archived.walk_children())
     assert channel.fetch_calls == []
     assert old_message.edit_calls == []
 
@@ -422,15 +498,15 @@ async def test_show_queue_uses_public_interaction_response_for_fresh_panel() -> 
 
     assert interaction.response.defer_calls == [{"thinking": True}]
     assert len(interaction.edit_calls) == 1
-    assert interaction.edit_calls[0]["embed"] is not None
-    assert isinstance(interaction.edit_calls[0]["view"], QueueView)
+    assert "embed" not in interaction.edit_calls[0]
+    assert isinstance(interaction.edit_calls[0]["view"], QueuePanel)
     assert interaction.edit_calls[0]["allowed_mentions"].everyone is False
     assert service.set_queue_calls == [(101, 222)]
     assert events == ["get_session", "persist", "retire:101:111"]
 
 
 @pytest.mark.asyncio
-async def test_turn_transition_reposts_queue_before_sending_next_picker() -> None:
+async def test_turn_transition_reposts_one_panel_and_notifies_the_next_reader() -> None:
     events: list[str] = []
     service = _FakeService(events)
     controller = _controller(service)
@@ -443,18 +519,14 @@ async def test_turn_transition_reposts_queue_before_sending_next_picker() -> Non
         refreshed_state: SessionState,
         *,
         repost: bool = False,
+        notify_reader: bool = False,
     ) -> _FakeMessage:
         assert refreshed_state is state
-        events.append(f"refresh:{repost}")
+        events.append(f"refresh:{repost}:{notify_reader}")
         return _FakeMessage(222, "new", events)
-
-    async def send_picker(picker_state: SessionState) -> None:
-        assert picker_state is state
-        events.append("picker")
 
     controller._retire_message = retire  # type: ignore[method-assign]
     controller._refresh_queue = refresh  # type: ignore[method-assign]
-    controller._send_picker = send_picker  # type: ignore[method-assign]
 
     await controller._apply_transition(
         Transition(
@@ -471,8 +543,7 @@ async def test_turn_transition_reposts_queue_before_sending_next_picker() -> Non
     assert events == [
         "retire:500",
         "retire:600",
-        "refresh:True",
-        "picker",
+        "refresh:True:True",
     ]
 
 
@@ -507,6 +578,11 @@ async def test_different_text_action_replaces_and_refreshes_current_reading() ->
 
     controller._refresh_reading = refresh  # type: ignore[method-assign]
 
+    async def refresh_queue(refreshed_state: SessionState) -> None:
+        assert refreshed_state is state
+        events.append("queue")
+
+    controller._refresh_queue = refresh_queue  # type: ignore[method-assign]
     await controller.handle_different_text(interaction)  # type: ignore[arg-type]
 
     assert interaction.response.defer_calls == [{}]
@@ -515,7 +591,7 @@ async def test_different_text_action_replaces_and_refreshes_current_reading() ->
     assert service.calls[0]["reader_id"] == 10
     assert service.calls[0]["reading_message_id"] == 700
     assert service.calls[0]["validator"] == controller._validate_reading_render
-    assert events == ["refresh"]
+    assert events == ["refresh", "queue"]
     assert interaction.followup.send_calls == [
         ("A different text was selected.", {"ephemeral": True})
     ]
