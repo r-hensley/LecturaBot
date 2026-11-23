@@ -281,7 +281,7 @@ class ReadingView(discord.ui.View):
         label="Terminar mi turno / End my turn",
         style=discord.ButtonStyle.danger,
         custom_id="pass_reading",
-        row=0,
+        row=1,
     )
     async def pass_reading(
         self,
