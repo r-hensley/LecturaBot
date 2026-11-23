@@ -17,7 +17,7 @@ import sqlite3
 import time
 from typing import Any
 
-from .models import Language, Level, ReadingText, SessionState
+from .models import Language, Level, QueueLayout, ReadingText, SessionState
 
 
 SCHEMA_VERSION = 2
@@ -162,23 +162,35 @@ class SQLiteRepository:
         return self._schema_version_sync()
 
     async def get_grace_minutes(self) -> int:
+        return int(self._get_setting("voice_grace_minutes", "5"))
+
+    async def set_grace_minutes(self, minutes: int) -> None:
+        await self._set_setting("voice_grace_minutes", str(minutes))
+
+    async def get_queue_layout(self) -> QueueLayout:
+        return QueueLayout(self._get_setting("queue_layout", QueueLayout.DUAL))
+
+    async def set_queue_layout(self, layout: QueueLayout) -> None:
+        await self._set_setting("queue_layout", layout.value)
+
+    def _get_setting(self, key: str, default: str) -> str:
         connection = self._connect()
         try:
             row = connection.execute(
-                "SELECT value FROM bot_settings WHERE key = 'voice_grace_minutes'"
+                "SELECT value FROM bot_settings WHERE key = ?", (key,),
             ).fetchone()
-            return 5 if row is None else int(row[0])
+            return default if row is None else row[0]
         finally:
             connection.close()
 
-    async def set_grace_minutes(self, minutes: int) -> None:
+    async def _set_setting(self, key: str, value: str) -> None:
         async with self._write_lock:
             connection = self._connect()
             try:
                 connection.execute(
-                    "INSERT INTO bot_settings (key, value) VALUES ('voice_grace_minutes', ?) "
+                    "INSERT INTO bot_settings (key, value) VALUES (?, ?) "
                     "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-                    (minutes,),
+                    (key, value),
                 )
                 connection.commit()
             finally:

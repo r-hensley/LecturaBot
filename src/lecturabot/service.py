@@ -27,6 +27,9 @@ from .models import (
 from .repository import SQLiteRepository
 
 
+MAX_CUSTOM_TEXT_LENGTH = 4_000
+
+
 class SessionError(RuntimeError):
     """A rejected domain transition with a stable code and bilingual copy."""
 
@@ -233,15 +236,18 @@ class SessionService:
             return None if state is None else self._snapshot(state)
 
     async def set_queue_message(
-        self, text_channel_id: int, message_id: int
+        self, text_channel_id: int, message_id: int, *, includes_picker: bool = True,
     ) -> SessionState:
         async with self._lock_for(text_channel_id):
             state = self._snapshot(
                 self._require_state(await self._load_locked(text_channel_id))
             )
-            state.queue_message_id = message_id
             if state.phase is SessionPhase.SELECTING:
-                state.picker_message_id = message_id
+                if includes_picker:
+                    state.picker_message_id = message_id
+                elif state.picker_message_id == state.queue_message_id:
+                    state.picker_message_id = None
+            state.queue_message_id = message_id
             await self._persist_locked(state)
             return self._snapshot(state)
 
@@ -269,6 +275,7 @@ class SessionService:
         text_channel_id: int,
         reader_id: int,
         message_id: int,
+        preceding_message_ids: tuple[int, ...] = (),
     ) -> SessionState:
         async with self._lock_for(text_channel_id):
             state = self._snapshot(
@@ -278,6 +285,7 @@ class SessionService:
             if state.phase is not SessionPhase.READING or state.active_reading is None:
                 raise self._wrong_phase("reading")
             state.active_reading.message_id = message_id
+            state.active_reading.preceding_message_ids = preceding_message_ids
             # The old picker remains recoverable until the reading message is
             # durably identified. Once this commit succeeds it becomes stale.
             state.picker_message_id = None
@@ -503,6 +511,12 @@ class SessionService:
         body: str,
         custom_language_label: str | None = None,
     ) -> Transition:
+        if len(body) > MAX_CUSTOM_TEXT_LENGTH:
+            raise SessionError(
+                "custom_text_too_long",
+                f"Máximo {MAX_CUSTOM_TEXT_LENGTH:,} caracteres. / "
+                f"Maximum {MAX_CUSTOM_TEXT_LENGTH:,} characters.",
+            )
         body = body.strip()
         if not body:
             raise SessionError(
@@ -956,7 +970,10 @@ class SessionService:
                 if (
                     state is not None
                     and state.active_reading is not None
-                    and state.active_reading.message_id == message_id
+                    and (
+                        state.active_reading.message_id == message_id
+                        or message_id in state.active_reading.preceding_message_ids
+                    )
                 ):
                     return self._snapshot(state)
         return None
@@ -988,7 +1005,7 @@ class SessionService:
             )
         )
         valid_sources = {expected_message_id}
-        if state.phase is SessionPhase.READING and expected_message_id is not None:
+        if expected_message_id is not None:
             valid_sources.add(state.queue_message_id)
         if source_message_id not in valid_sources:
             raise SessionError(
@@ -1040,6 +1057,7 @@ class SessionService:
 
     def _activate_reader(self, state: SessionState, index: int) -> None:
         state.current_index = index
+        state.turn_number += 1
         state.phase = SessionPhase.SELECTING
         state.turn_started_at = self._clock()
         state.active_reading = None

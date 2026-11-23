@@ -21,6 +21,7 @@ from lecturabot.rendering import (
     build_picker_embed,
     build_queue_embed,
     build_reading_content,
+    build_reading_messages,
     highlight_body,
 )
 from lecturabot.views import (
@@ -292,6 +293,21 @@ def test_highlight_markup_cannot_block_a_correction_that_fits_the_embed() -> Non
     assert "__**word**__" not in content
 
 
+@pytest.mark.parametrize(
+    "body", ["x" * 4_000, "_📘" * 2_000, "palabra " * 240 + "\n\n" + "niño " * 400],
+)
+def test_custom_reading_splits_without_losing_content(body: str) -> None:
+    reading = ActiveReading(10, "Reader", Language.ENGLISH, None, body, 100)
+
+    first, *remaining = build_reading_messages(reading)
+    assert remaining
+    assert all(len(part.encode("utf-16-le")) // 2 <= 2_000 for part in [first, *remaining])
+    rebuilt = "".join(
+        part.removesuffix("\n** **") for part in [first.split("\n", 1)[1], *remaining]
+    )
+    assert rebuilt == discord.utils.escape_markdown(body)
+
+
 def test_correction_embed_uses_typed_overflow_for_rollover() -> None:
     reading = ActiveReading(
         reader_id=10,
@@ -492,13 +508,6 @@ async def test_persistent_views_match_button_contract() -> None:
     assert _button_contract(reading) == [
         ("Enviar correcciones / Submit corrections", "submit_correction", 3, 0),
         ("Otro texto / Different Text", "different_catalog_text", 1, 0),
-        ("Pasar turno / Pass Turn", "pass_reading", 4, 0),
-        (
-            "Votar para saltar el turno / Vote to skip the turn",
-            "skip_afk_reading",
-            2,
-            0,
-        ),
     ]
 
     custom_reading = ReadingView(  # type: ignore[arg-type]

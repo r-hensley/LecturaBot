@@ -3,23 +3,33 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
+import logging
+import sys
 from typing import TYPE_CHECKING
 
 import discord
 from discord import app_commands
 from discord.ext import commands
 
-from .rendering import build_instructions_embed
+from .hotfix import refresh_runtime
 
 if TYPE_CHECKING:
     from .bot import LecturaBot
     from .controller import LecturaController
+    from .models import QueueLayout
 
 
 SUPPORT_THREAD_URL = "https://discord.com/channels/243838819743432704/1525628752074113127"
+LOGGER = logging.getLogger(__name__)
+QUEUE_LAYOUT_LABELS = {
+    "single": "Single embed",
+    "dual": "Two embeds",
+}
 
 
 async def send_queue_help(interaction: discord.Interaction) -> None:
+    from .rendering import build_instructions_embed
+
     embed = build_instructions_embed().add_field(
         name="Soporte / Support",
         value=(
@@ -33,14 +43,15 @@ async def send_queue_help(interaction: discord.Interaction) -> None:
     )
 
 
-def settings_embed(minutes: int) -> discord.Embed:
+def settings_embed(minutes: int, layout: QueueLayout) -> discord.Embed:
     embed = discord.Embed(title="LecturaBot settings")
     embed.add_field(
         name="Voice reconnect grace period",
         value=f"{minutes} minute{'s' if minutes != 1 else ''}",
         inline=False,
     )
-    embed.set_footer(text="Changes apply to new disconnects.")
+    embed.add_field(name="Queue layout", value=QUEUE_LAYOUT_LABELS[layout], inline=False)
+    embed.set_footer(text="The grace period applies to new disconnects.")
     return embed
 
 
@@ -70,6 +81,16 @@ class SettingsView(discord.ui.View):
         super().__init__(timeout=300)
         self.controller = controller
         self.user_id = user_id
+        self._select_current_layout()
+
+    def _select_current_layout(self) -> None:
+        self.layout.options = [
+            discord.SelectOption(
+                label=option.label, value=option.value, description=option.description,
+                default=option.value == self.controller.queue_layout,
+            )
+            for option in self.layout.options
+        ]
 
     async def authorized(self, interaction: discord.Interaction) -> bool:
         if (
@@ -88,9 +109,51 @@ class SettingsView(discord.ui.View):
     async def save(self, interaction: discord.Interaction, minutes: int) -> None:
         await self.controller.service.repository.set_grace_minutes(minutes)
         self.controller.voice_grace_seconds = minutes * 60
+        self._select_current_layout()
         await interaction.response.edit_message(
-            embed=settings_embed(minutes), view=self
+            embed=settings_embed(minutes, self.controller.queue_layout), view=self
         )
+
+    @discord.ui.select(
+        placeholder="Set queue layout",
+        options=[
+            discord.SelectOption(
+                label=QUEUE_LAYOUT_LABELS["single"], value="single",
+                description="The queue and text picker share one message.",
+            ),
+            discord.SelectOption(
+                label=QUEUE_LAYOUT_LABELS["dual"], value="dual",
+                description="The queue stays in place and each turn gets a temporary picker.",
+            ),
+        ],
+    )
+    async def layout(
+        self, interaction: discord.Interaction, select: discord.ui.Select[SettingsView],
+    ) -> None:
+        from .models import QueueLayout
+
+        if not await self.authorized(interaction):
+            return
+        await interaction.response.defer()
+        try:
+            failed_rooms = await self.controller.set_queue_layout(QueueLayout(select.values[0]))
+        except Exception:
+            LOGGER.exception("failed to save queue layout")
+            await interaction.followup.send("Could not save the queue layout.", ephemeral=True)
+            return
+        self._select_current_layout()
+        await interaction.edit_original_response(
+            embed=settings_embed(
+                self.controller.voice_grace_seconds // 60, self.controller.queue_layout,
+            ),
+            view=self,
+        )
+        if failed_rooms:
+            await interaction.followup.send(
+                "Layout saved. Could not refresh: " + ", ".join(failed_rooms)
+                + ". Select the layout again to retry.",
+                ephemeral=True,
+            )
 
     @discord.ui.select(
         placeholder="Set voice reconnect grace period",
@@ -153,7 +216,7 @@ class LecturaCog(commands.Cog):
             return
         minutes = self.controller.voice_grace_seconds // 60
         await interaction.response.send_message(
-            embed=settings_embed(minutes),
+            embed=settings_embed(minutes, self.controller.queue_layout),
             view=SettingsView(self.controller, interaction.user.id),
             ephemeral=True,
         )
@@ -194,4 +257,7 @@ class LecturaCog(commands.Cog):
 async def setup(bot: LecturaBot) -> None:
     cog = LecturaCog(bot.controller)
     await bot.add_cog(cog, guild=bot.command_guild)
+    # discord.py calls the previous setup directly when a reload fails.
+    if getattr(sys.modules.get(__name__), "setup", None) is setup:
+        await refresh_runtime(bot)
     cog.install_queue_help()

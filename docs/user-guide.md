@@ -25,9 +25,8 @@ corrections, and reading-time statistics.
    click **Otro texto / Different Text** to receive another passage from the
    same language and level. Other people in the voice channel can submit
    pronunciation corrections.
-8. Review the corrections, then click **Pasar turno / Pass Turn**. Only the
-   current reader can use this button. The bot moves to the next reader and
-   publishes a fresh queue panel.
+8. Review the corrections, then click **Saltar turno / Skip Turn** in the
+   queue. The current reader's click ends the turn immediately.
 
 ### Join the correct room
 
@@ -38,9 +37,8 @@ If you disconnect, reconnect to the same voice channel within the server's
 grace period (five minutes by default) to keep your place without pressing **Join** again. After the grace period, or
 if you move directly to another voice channel, the bot removes you. You
 lose your position and must join again at the end. The bot updates the active
-queue panel in place without posting it again. If the current reader leaves,
-the bot passes to the next reader when the session can continue and publishes
-a fresh panel for that new turn.
+queue panel. If the current reader leaves and the session can continue, the
+bot advances to the next reader and opens their picker.
 
 ### Queue controls
 
@@ -48,8 +46,9 @@ a fresh panel for that new turn.
 | --- | --- |
 | **Unirse / Join** | Adds you to the end of the reader queue. |
 | **Salir / Leave** | Removes you from the queue. |
-| **? Ayuda / Help** | Shows instructions and a link to the support thread in a private reply. |
+| **Cómo participar / How to join** | Opens the Discord guide. |
 | **Comenzar / Start** | Starts the rotation with one or more queued participants. |
+| **Saltar turno / Skip Turn** | Ends your own turn or casts a vote to skip the current reader. |
 
 `/queue` publishes a fresh public queue panel in the channel. Running it again
 replaces the previous panel instead of creating a separate session. `/cola`
@@ -63,12 +62,14 @@ ends; the next person to enter starts a new room session.
 
 ### Choose what to read
 
-When it is your turn, the bot mentions you and displays the picker in the queue panel.
+When it's your turn, the bot mentions you above the picker. In **Two embeds**
+mode, the picker appears in a separate message that disappears after you
+choose. In **Single embed** mode, the picker appears inside the queue panel.
 
-The **Catálogo / Catalog** menu combines language and level:
+The catalog buttons are grouped by language:
 
-- **Español Principiante**, **Español Intermedio**, or **Español Avanzado**
-- **English Beginner**, **English Intermediate**, or **English Advanced**
+- 📗 **Español** — **Principiante**, **Intermedio**, or **Avanzado**
+- 📘 **English** — **Beginner**, **Intermediate**, or **Advanced**
 
 The shared catalog is bundled with the bot from the community reading-text
 collection, so choosing a passage does not open Google Drive or require an
@@ -92,14 +93,15 @@ shown for a passage you supplied yourself.
 To bring your own passage, click **Tu propio texto / Use your own text**.
 Choose the language, paste the passage, and submit the form. Custom passages are used only
 for that turn and are not added to the shared catalog. A custom passage can
-contain up to 1,600 characters.
+contain up to 4,000 characters. If it exceeds Discord's message limit, the bot
+posts the parts in order. **Submit corrections** is on the last part, and you
+can reply to any part to suggest a correction.
 
 In the **Other Languages** room, use **Use your own text** and enter the language
 name when prompted. Catalog texts are only available in the standard
 English-Spanish rooms.
 
-If you do not want to read during your turn, click **Pasar Turno / Pass Turn**
-on the text picker.
+You can also use **Saltar turno / Skip Turn** in the queue before choosing a text.
 
 ### Submit corrections
 
@@ -111,10 +113,10 @@ Use either method:
 
 1. Click **Enviar correcciones / Submit corrections** on the reading message.
    Separate corrected words or phrases with newlines or commas.
-2. Reply directly to the bot's active reading message with **ping on reply
+2. Reply directly to one of the bot's messages for the active reading with **ping on reply
    enabled**, or explicitly @mention the current bot in that same reply.
    Newlines and commas also separate the corrections in your reply. Mentioning
-   the bot without replying to the active reading message does not submit
+   the bot without replying to a message for the active reading does not submit
    corrections.
 
 The bot removes its own explicit @mention before reading your corrections, so
@@ -179,24 +181,18 @@ verify native-language roles.
 
 ### Finish or skip a turn
 
-- The **current reader** clicks **Pasar turno / Pass Turn** after reviewing the
-  corrections. No other participant can use Pass Turn. A completed reading is
-  added to that reader's statistics.
+- The **current reader** clicks **Saltar turno / Skip Turn** after reviewing the
+  corrections. A completed reading is added to that reader's statistics.
 - **Otro texto / Different Text** changes only the current catalog passage. It
   does not skip the reader's turn or add a completed reading to statistics.
-- To force an absent reader's turn to end, use the separate **Votar para
-  saltar el turno / Vote to skip the turn** button. The queue panel shows the vote count.
-  Exactly three different queued,
-  non-current readers must vote. A person can vote only once per turn, and the
-  three-vote requirement is not reduced when fewer eligible voters are
-  present.
-- The current reader cannot vote to skip their own turn. Correctors who are
-  listening but are not in the queue cannot vote either.
+- Three other queued readers can click **Saltar turno / Skip Turn** to end an
+  absent reader's turn. Each can vote once per turn. The queue shows the vote
+  count.
 - Skipped, disconnected, and selection-only turns do not count as completed
   readings.
 
-After any normal pass, successful AFK skip, or current-reader departure, the
-bot publishes a fresh queue panel for the new turn.
+After a pass, successful skip vote, or current-reader departure, the bot opens
+the next reader's picker when the session can continue.
 
 The session continues when only one reader remains; that reader receives each
 new turn. If the queue becomes empty, the session ends.
@@ -205,14 +201,12 @@ new turn. If the queue becomes empty, the session ends.
 
 The queue panel shows:
 
-- `En cola / In the queue` lists readers in order before the session starts.
-- `Siguientes / Up next` lists the readers after the current reader, starting at position 2.
+- Readers are numbered in turn order. The current reader is number 1.
 - `turnos / turns` counts readings you completed during your current statistics window.
 - `prom. / avg.` shows the average duration of those readings in `MM:SS`. It appears once you have a completed reading.
 
 Reading time begins when the bot publishes the selected passage and ends when
-the current reader presses **Pass Turn**. The newly completed reading and its
-updated statistics appear in the fresh queue panel for the next turn.
+the current reader presses **Skip Turn**. Updated statistics appear on the queue.
 
 Each person has an independent statistics window. A normal completed reading
 starts or extends it for six hours from that completion. After exactly six
@@ -257,9 +251,8 @@ Report all problems in the [Discord support thread](https://discord.com/channels
 7. Lee el texto en voz alta. Si no quieres el texto del catálogo, pulsa **Otro
    texto / Different Text** para recibir otro del mismo idioma y nivel. Las
    otras personas del canal de voz pueden enviar correcciones de pronunciación.
-8. Revisa las correcciones y pulsa **Pasar turno / Pass Turn**. Solo el lector
-   actual puede usar este botón. El bot pasará al siguiente lector y publicará
-   un panel nuevo de la cola.
+8. Revisa las correcciones y pulsa **Saltar turno / Skip Turn** en la cola.
+   Si eres el lector actual, tu turno termina de inmediato.
 
 ### Usa la sala correcta
 
@@ -269,10 +262,8 @@ texto de Lectura 2 mientras estás conectado al canal de voz Lectura 2.
 Si te desconectas, vuelve al mismo canal de voz dentro del período de gracia
 (cinco minutos por defecto) para conservar tu puesto sin volver a pulsar **Unirse**. Si pasa ese período
 o te mueves directamente a otro canal de voz, el bot te quitará de la cola.
-Perderás tu puesto y tendrás que unirte de nuevo al final. El bot actualizará
-el panel activo sin volver a publicarlo. Si sale el lector actual, el bot
-pasará al siguiente lector cuando la sesión pueda continuar y publicará un
-panel nuevo para ese turno.
+Perderás tu puesto y tendrás que unirte de nuevo al final. Si sale el lector
+actual y la sesión puede continuar, el bot pasa al siguiente y abre su selector.
 
 ### Controles de la cola
 
@@ -280,8 +271,9 @@ panel nuevo para ese turno.
 | --- | --- |
 | **Unirse / Join** | Te añade al final de la cola de lectores. |
 | **Salir / Leave** | Te quita de la cola. |
-| **? Ayuda / Help** | Muestra las instrucciones y un enlace al hilo de soporte en privado. |
+| **Cómo participar / How to join** | Abre la guía de Discord. |
 | **Comenzar / Start** | Comienza la rotación con una o más personas en la cola. |
+| **Saltar turno / Skip Turn** | Termina tu turno o registra un voto para saltar al lector actual. |
 
 `/cola` publica un panel nuevo y público de la cola en el canal. Volver a
 ejecutarlo reemplaza el panel anterior; no crea una sesión separada. `/queue`
@@ -296,12 +288,14 @@ sala.
 
 ### Elige qué leer
 
-Cuando sea tu turno, el bot te mencionará y mostrará el selector de textos en el panel de la cola.
+Cuando sea tu turno, el bot te mencionará encima del selector. En **Two embeds**,
+el selector aparece en un mensaje aparte que desaparece al elegir. En **Single
+embed**, aparece dentro del panel de la cola.
 
-El menú **Catálogo / Catalog** combina el idioma y el nivel:
+Los botones del catálogo se agrupan por idioma:
 
-- **Español Principiante**, **Español Intermedio** o **Español Avanzado**
-- **English Beginner**, **English Intermediate** o **English Advanced**
+- 📗 **Español** — **Principiante**, **Intermedio** o **Avanzado**
+- 📘 **English** — **Beginner**, **Intermediate** o **Advanced**
 
 El catálogo compartido está incluido dentro del bot a partir de la colección
 comunitaria de textos; elegir un texto no abre Google Drive ni requiere un
@@ -318,14 +312,14 @@ historial solo se reinicia cuando la cola queda vacía y termina la sesión.
 Para usar tu propio texto, pulsa **Tu propio texto / Use your own text**.
 Elige el idioma, pega el texto y envía el formulario. Los textos propios solo se usan
 durante ese turno y no se añaden al catálogo compartido. Un texto propio puede
-tener hasta 1.600 caracteres.
+tener hasta 4.000 caracteres. Si supera el límite por mensaje de Discord, el
+bot publica las partes en orden.
 
 En la sala **Other Languages**, usa **Use your own text** e indica el nombre del
 idioma cuando el bot lo pida. El catálogo solo está disponible en las salas
 normales de inglés y español.
 
-Si no quieres leer durante tu turno, pulsa **Pasar Turno / Pass Turn** en el
-selector de textos.
+También puedes pulsar **Saltar turno / Skip Turn** en la cola antes de elegir un texto.
 
 Si no quieres el texto del catálogo que aparece, pulsa **Otro texto / Different
 Text**. El bot lo reemplazará en el mismo mensaje por otro texto no visto del
@@ -406,25 +400,18 @@ los roles de idioma nativo.
 
 ### Termina o salta un turno
 
-- El **lector actual** pulsa **Pasar turno / Pass Turn** después de revisar las
-  correcciones. Ningún otro participante puede usar Pass Turn. La lectura
-  completada se añade a sus estadísticas.
+- El **lector actual** pulsa **Saltar turno / Skip Turn** después de revisar las
+  correcciones. La lectura completada se añade a sus estadísticas.
 - **Otro texto / Different Text** solo cambia el texto actual del catálogo. No
   salta el turno del lector ni añade una lectura completada a las estadísticas.
-- Para forzar el fin del turno de una persona ausente, pulsa el botón separado
-  **Votar para saltar el turno / Vote to skip the turn**. El panel de la cola muestra el recuento.
-  Deben votar exactamente tres
-  lectores distintos que estén en la cola y que no sean el lector actual. Cada
-  persona puede votar una sola vez por turno y el requisito de tres votos no se
-  reduce cuando haya menos votantes disponibles.
-- El lector actual no puede votar para saltar su propio turno. Las personas que
-  escuchan pero no están en la cola tampoco pueden votar.
+- Otros tres lectores en la cola pueden pulsar **Saltar turno / Skip Turn**
+  para terminar el turno de una persona ausente. Cada uno puede votar una sola
+  vez por turno. La cola muestra el recuento.
 - Los turnos saltados, las desconexiones y los turnos pasados antes de elegir
   un texto no cuentan como lecturas completadas.
 
-Después de un turno pasado normalmente, un voto AFK completado o la salida del
-lector actual, el bot publicará un panel nuevo de la cola para el siguiente
-turno.
+Después de terminar o saltar un turno, o si sale el lector actual, el bot abre
+el selector del siguiente lector si la sesión puede continuar.
 
 La sesión continúa cuando queda un solo lector; esa persona recibe cada turno
 nuevo. Si la cola queda vacía, la sesión termina.
@@ -433,14 +420,12 @@ nuevo. Si la cola queda vacía, la sesión termina.
 
 El panel de la cola muestra:
 
-- `En cola / In the queue` muestra el orden de los lectores antes de empezar.
-- `Siguientes / Up next` muestra quiénes van después del lector actual, a partir del puesto 2.
+- Los lectores aparecen numerados en orden de turno. El lector actual ocupa el puesto 1.
 - `turnos / turns` indica cuántas lecturas completaste en tu período de estadísticas actual.
 - `prom. / avg.` muestra la duración media de esas lecturas en formato `MM:SS`. Aparece cuando ya has completado al menos una lectura.
 
 El tiempo comienza cuando el bot publica el texto elegido y termina cuando el
-lector actual pulsa **Pass Turn**. La lectura recién completada y las
-estadísticas actualizadas aparecerán en el panel nuevo del siguiente turno.
+lector actual pulsa **Skip Turn**. Las estadísticas actualizadas aparecen en la cola.
 
 Cada persona tiene una ventana de estadísticas independiente. Una lectura
 completada normalmente la inicia o la prolonga durante seis horas desde esa

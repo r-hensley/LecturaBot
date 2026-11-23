@@ -17,12 +17,14 @@ from lecturabot.models import (
     Language,
     Level,
     MemberState,
+    QueueLayout,
     SessionPhase,
     SessionState,
 )
-from lecturabot.queue_panel import QueuePanel
+from lecturabot.queue_panel import GUIDE_URL, QueuePanel, QueueSkipButton
+from lecturabot.repository import SQLiteRepository
 from lecturabot.rendering import CorrectionSummaryOverflow
-from lecturabot.service import SessionError, Transition
+from lecturabot.service import SessionError, SessionService, Transition
 from lecturabot.views import CustomTextModal, ReadingView
 
 
@@ -53,6 +55,9 @@ class _FakeMessage:
         if self.failed_edits:
             self.failed_edits -= 1
             raise RuntimeError("message edit failed")
+
+    async def delete(self) -> None:
+        self.events.append(f"{self.name}.delete")
 
 
 class _FakeChannel:
@@ -89,6 +94,10 @@ class _FakeChannel:
             return self.new_message
         raise AssertionError(f"unexpected message fetch: {message_id}")
 
+    def get_partial_message(self, message_id: int) -> _FakeMessage:
+        assert message_id == self.new_message.id
+        return self.new_message
+
 
 class _FakeService:
     minimum_participants = 1
@@ -102,6 +111,8 @@ class _FakeService:
         self,
         text_channel_id: int,
         message_id: int,
+        *,
+        includes_picker: bool = True,
     ) -> None:
         self.events.append("persist")
         self.set_queue_calls.append((text_channel_id, message_id))
@@ -197,7 +208,9 @@ class _CorrectionService:
     async def find_by_reading_message(self, message_id: int) -> SessionState | None:
         self.find_calls.append(message_id)
         reading = self.state.active_reading
-        if reading is not None and reading.message_id == message_id:
+        if reading is not None and (
+            reading.message_id == message_id or message_id in reading.preceding_message_ids
+        ):
             return self.state
         return None
 
@@ -361,52 +374,224 @@ async def test_legacy_selection_migrates_to_one_panel_before_retiring_messages()
         events=events,
     )
     controller = _controller(_FakeService(events))
+    controller.queue_layout = QueueLayout.SINGLE
     controller._text_channel = AsyncMock(return_value=channel)  # type: ignore[method-assign]
 
     async def retire(_channel_id: int, message_id: int | None) -> None:
         events.append(f"retire:{message_id}")
 
+    async def remove_picker(_state: SessionState, message_id: int | None) -> None:
+        events.append(f"delete:{message_id}")
+
     controller._retire_message = retire  # type: ignore[method-assign]
+    controller._remove_picker = remove_picker  # type: ignore[method-assign]
     await controller._refresh_queue(state)
 
-    assert events == ["fetch:111", "send", "persist", "retire:333", "retire:111"]
+    assert events == ["fetch:111", "send", "persist", "delete:333", "retire:111"]
     sent = channel.send_calls[0]
     assert any(
-        isinstance(item, discord.ui.Select) and item.custom_id == "queue_catalog"
+        isinstance(item, discord.ui.Button) and item.custom_id == "queue_catalog:es:0"
         for item in sent["view"].walk_children()
     )
     assert sent["allowed_mentions"].users is False
 
 
-async def test_compact_menu_routes_the_selected_language_and_level() -> None:
+@pytest.mark.parametrize("picker_only", [False, True])
+async def test_picker_buttons_route_language_and_level(picker_only: bool) -> None:
     state = _reading_state()
     state.phase = SessionPhase.SELECTING
     state.active_reading = None
     controller = _controller(_FakeService([]))
     controller.handle_catalog_selection = AsyncMock()  # type: ignore[method-assign]
-    panel = QueuePanel(controller, state)
-    menu = next(item for item in panel.walk_children() if isinstance(item, discord.ui.Select))
-    assert [option.value for option in menu.options] == [
-        "es:0", "es:1", "es:2", "en:0", "en:1", "en:2"
+    panel = QueuePanel(controller, state, includes_picker=not picker_only, picker_only=picker_only)
+    buttons = [
+        item for item in panel.walk_children()
+        if isinstance(item, discord.ui.Button)
+        and (item.custom_id or "").startswith("queue_catalog:")
     ]
+    assert [item.custom_id for item in buttons] == [
+        "queue_catalog:es:0", "queue_catalog:es:1", "queue_catalog:es:2",
+        "queue_catalog:en:0", "queue_catalog:en:1", "queue_catalog:en:2",
+    ]
+    assert [item.style.value for item in buttons] == [3, 3, 3, 1, 1, 1]
+    assert isinstance(panel.children[0], discord.ui.TextDisplay)
+    assert panel.children[0].content.startswith("<@10>")
+    assert (GUIDE_URL in str(panel.to_components())) is not picker_only
     assert panel.is_persistent()
-    menu._values = ["en:1"]
     interaction = _FakeInteraction(_FakeMessage(222, "panel", []))
-    await menu.callback(interaction)  # type: ignore[arg-type]
+    await buttons[4].callback(interaction)  # type: ignore[arg-type]
     controller.handle_catalog_selection.assert_awaited_once_with(
         interaction, language=Language.ENGLISH, level_index=1,
     )
 
     state.channel_mode = ChannelMode.CUSTOM_ONLY
-    custom_panel = QueuePanel(controller, state)
-    assert not any(isinstance(item, discord.ui.Select) for item in custom_panel.walk_children())
+    custom_panel = QueuePanel(controller, state, picker_only=True)
+    assert [
+        item.custom_id for item in custom_panel.walk_children() if isinstance(item, discord.ui.Button)
+    ] == ["queue_custom_text"]
     modal = CustomTextModal(
         controller, text_channel_id=101, picker_message_id=222, language=None,
-        ask_language=False, max_text_length=1600,
+        ask_language=False, max_text_length=4000,
     )
     assert modal.language_select is not None
     assert [option.value for option in modal.language_select.options] == ["es", "en"]
-    assert modal.body_input.max_length == 1600
+    assert modal.body_input.max_length == 4000
+
+
+async def test_switch_layouts_preserves_turn_and_moves_the_picker(tmp_path: Path) -> None:
+    events: list[str] = []
+    state = _reading_state()
+    state.phase = SessionPhase.SELECTING
+    state.active_reading = None
+    state.queue_message_id = 111
+    state.turn_number = 5
+    repository = SQLiteRepository(tmp_path / "settings.sqlite3")
+    await repository.initialize()
+    await repository.save_session(state)
+    service = SessionService(repository)
+    await service.initialize()
+    controller = _controller(
+        service, channel_pairs=(ChannelPairConfig("Lectura 1", 101, 201, ChannelMode.STANDARD),),
+    )
+    channel = _FakeChannel(
+        new_message=_FakeMessage(222, "picker", events),
+        old_message=_FakeMessage(111, "queue", events, v2=True),
+        events=events,
+    )
+    controller._text_channel = AsyncMock(return_value=channel)  # type: ignore[method-assign]
+
+    assert controller.queue_layout is QueueLayout.DUAL
+    await controller._refresh_queue(state, notify_reader=True)
+    picker = await service.get_session(101)
+    assert picker is not None and picker.picker_message_id == 222
+    assert channel.send_calls[0]["allowed_mentions"].to_dict() == {
+        "parse": [], "users": [10],
+    }
+    assert channel.send_calls[0]["view"].to_components()[0]["content"].startswith("<@10>")
+    assert all("queue_catalog" not in str(edit["view"].to_components())
+               for edit in channel.old_message.edit_calls)
+
+    assert await controller.set_queue_layout(QueueLayout.SINGLE) == []
+    merged = await service.get_session(101)
+    assert merged is not None and merged.picker_message_id == merged.queue_message_id == 111
+    assert "picker.delete" in events
+    assert "queue_catalog" in str(channel.old_message.edit_calls[-1]["view"].to_components())
+    assert await SQLiteRepository(repository.database_path).get_queue_layout() is QueueLayout.SINGLE
+
+    channel.new_message = _FakeMessage(223, "replacement", events)
+    assert await controller.set_queue_layout(QueueLayout.DUAL) == []
+    split = await service.get_session(101)
+    assert split is not None
+    assert (split.queue_message_id, split.picker_message_id) == (111, 223)
+    assert split.current_user_id == 10 and split.queue == state.queue
+    assert split.turn_number == 5
+    assert channel.send_calls[-1]["allowed_mentions"].users is False
+    assert "queue_catalog" not in str(channel.old_message.edit_calls[-1]["view"].to_components())
+    assert await SQLiteRepository(repository.database_path).get_queue_layout() is QueueLayout.DUAL
+
+    # A modal opened on the single embed still belongs to this turn.
+    pair = controller.config.channel_pairs[0]
+    member = SimpleNamespace(id=10)
+    controller._interaction_context = lambda _: (pair, member)  # type: ignore[method-assign]
+    controller._require_matching_voice = lambda *_: None  # type: ignore[method-assign]
+
+    async def publish(transition: Transition) -> None:
+        assert transition.state.active_reading is not None
+        assert transition.state.active_reading.body == "My passage."
+        await service.set_reading_message(text_channel_id=101, reader_id=10, message_id=700)
+
+    controller._publish_reading = publish  # type: ignore[method-assign]
+    interaction = _ModalInteraction()
+    await controller.submit_custom_text(
+        interaction,  # type: ignore[arg-type]
+        text_channel_id=101, picker_message_id=111, language=Language.ENGLISH,
+        body="My passage.", custom_language_label=None, turn=(state.session_id, 5),
+    )
+    assert "replacement.delete" in events
+    assert await controller.set_queue_layout(QueueLayout.SINGLE) == []
+    reading = await service.get_session(101)
+    assert reading is not None and reading.active_reading is not None
+    assert reading.phase is SessionPhase.READING and reading.active_reading.message_id == 700
+    assert reading.picker_message_id is None
+    assert len(channel.send_calls) == 2
+
+
+@pytest.mark.parametrize("member_id,button_turn", [(10, 4), (20, 4), (20, 3)])
+async def test_shared_skip_routes_reader_and_voter_and_rejects_old_turn(
+    member_id: int, button_turn: int,
+) -> None:
+    state = _reading_state()
+    state.queue_message_id = 111
+    state.turn_number = 4
+    transition = Transition(state, "Action saved.")
+    service = SimpleNamespace(
+        get_session=AsyncMock(return_value=state),
+        pass_turn=AsyncMock(return_value=transition),
+        vote_to_skip=AsyncMock(return_value=transition),
+    )
+    controller = _controller(service)
+    pair = ChannelPairConfig("Lectura 1", 101, 201, ChannelMode.STANDARD)
+    member = SimpleNamespace(id=member_id)
+    controller._interaction_context = lambda _: (pair, member)  # type: ignore[method-assign]
+    controller._require_matching_voice = lambda *_: None  # type: ignore[method-assign]
+    controller._refresh_queue = AsyncMock()  # type: ignore[method-assign]
+    interaction = _FakeInteraction(_FakeMessage(111, "queue", []))
+    interaction.client = SimpleNamespace(controller=controller)
+    button = QueueSkipButton(state.session_id, button_turn, state.phase, "Skip Turn")
+
+    await button.callback(interaction)  # type: ignore[arg-type]
+
+    if button_turn != state.turn_number:
+        service.pass_turn.assert_not_awaited()
+        service.vote_to_skip.assert_not_awaited()
+        assert "no longer active" in interaction.followup.send_calls[0][0]
+    elif member_id == 10:
+        service.pass_turn.assert_awaited_once_with(
+            text_channel_id=101, actor_id=10, source_message_id=111,
+        )
+        service.vote_to_skip.assert_not_awaited()
+    else:
+        service.vote_to_skip.assert_awaited_once_with(
+            text_channel_id=101, voter_id=20, source_message_id=111,
+        )
+        service.pass_turn.assert_not_awaited()
+
+
+@pytest.mark.parametrize("fail_sending_second_part", [False, True])
+@pytest.mark.asyncio
+async def test_custom_passage_posts_parts_before_committing_controls(
+    fail_sending_second_part: bool,
+) -> None:
+    state = _reading_state()
+    reading = state.active_reading
+    assert reading is not None
+    reading.level = None
+    reading.body = "x" * 2_400
+    first = SimpleNamespace(id=699, delete=AsyncMock())
+    last = SimpleNamespace(id=700, delete=AsyncMock())
+    second_send = RuntimeError("send failed") if fail_sending_second_part else last
+    channel = SimpleNamespace(send=AsyncMock(side_effect=[first, second_send]))
+    service = SimpleNamespace(set_reading_message=AsyncMock())
+    controller = _controller(service)
+    controller._text_channel = AsyncMock(return_value=channel)  # type: ignore[method-assign]
+    transition = Transition(state, "Text received.")
+
+    if fail_sending_second_part:
+        with pytest.raises(RuntimeError, match="send failed"):
+            await controller._publish_reading(transition)
+        first.delete.assert_awaited_once()
+        service.set_reading_message.assert_not_awaited()
+        return
+
+    await controller._publish_reading(transition)
+    first_send, final_send = [call.kwargs for call in channel.send.await_args_list]
+    assert first_send["content"].startswith("## Reader")
+    assert "view" not in first_send and "embed" not in first_send
+    assert isinstance(final_send["view"], ReadingView)
+    assert final_send["embed"] is not None
+    service.set_reading_message.assert_awaited_once_with(
+        text_channel_id=101, reader_id=10, message_id=700, preceding_message_ids=(699,),
+    )
 
 
 @pytest.mark.asyncio
@@ -507,15 +692,20 @@ async def test_show_queue_uses_public_interaction_response_for_fresh_panel() -> 
     assert events == ["get_session", "persist", "retire:101:111"]
 
 
+@pytest.mark.parametrize("layout", [QueueLayout.SINGLE, QueueLayout.DUAL])
 @pytest.mark.asyncio
-async def test_turn_transition_reposts_one_panel_and_notifies_the_next_reader() -> None:
+async def test_turn_transition_notifies_the_next_reader(layout: QueueLayout) -> None:
     events: list[str] = []
     service = _FakeService(events)
     controller = _controller(service)
+    controller.queue_layout = layout
     state = _state()
 
     async def retire(_channel_id: int, message_id: int | None) -> None:
         events.append(f"retire:{message_id}")
+
+    async def remove_picker(_state: SessionState, message_id: int | None) -> None:
+        events.append(f"delete:{message_id}")
 
     async def refresh(
         refreshed_state: SessionState,
@@ -528,6 +718,7 @@ async def test_turn_transition_reposts_one_panel_and_notifies_the_next_reader() 
         return _FakeMessage(222, "new", events)
 
     controller._retire_message = retire  # type: ignore[method-assign]
+    controller._remove_picker = remove_picker  # type: ignore[method-assign]
     controller._refresh_queue = refresh  # type: ignore[method-assign]
 
     await controller._apply_transition(
@@ -543,9 +734,9 @@ async def test_turn_transition_reposts_one_panel_and_notifies_the_next_reader() 
     )
 
     assert events == [
-        "retire:500",
+        "delete:500",
         "retire:600",
-        "refresh:True:True",
+        f"refresh:{layout is QueueLayout.SINGLE}:True",
     ]
 
 
@@ -821,6 +1012,25 @@ async def test_reply_to_reading_submits_corrections_and_refreshes_message(
     assert service.add_calls[0]["source"] is CorrectionSource.REPLY
     assert refreshed == [service.state]
     assert reply.reply_calls == []
+
+
+@pytest.mark.asyncio
+async def test_reply_to_preceding_passage_part_uses_active_summary(
+    correction_reply_context: _CorrectionReplyContext,
+) -> None:
+    controller, service, reply, refreshed = correction_reply_context
+    reading = service.state.active_reading
+    assert reading is not None
+    reading.preceding_message_ids = (699,)
+    reply.reference.message_id = 699
+    reply.content = "apple"
+
+    await controller.handle_reply(reply)  # type: ignore[arg-type]
+
+    assert service.find_calls == [699]
+    assert service.add_calls[0]["reading_message_id"] == 700
+    assert service.add_calls[0]["items"] == ["apple"]
+    assert refreshed == [service.state]
 
 
 @pytest.mark.parametrize(

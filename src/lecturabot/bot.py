@@ -15,10 +15,8 @@ from discord.ext import commands
 from .bot_control import BotControl
 from .config import BotConfig
 from .controller import LecturaController
-from .queue_panel import QueuePanel
 from .repository import SQLiteRepository
 from .service import SessionService
-from .views import QueueView, ReadingView, TextPickerView
 
 
 LOGGER = logging.getLogger(__name__)
@@ -111,6 +109,7 @@ class LecturaBot(commands.Bot):
         self.controller.voice_grace_seconds = (
             await self.repository.get_grace_minutes()
         ) * 60
+        self.controller.queue_layout = await self.repository.get_queue_layout()
         catalog_resource = resources.files("lecturabot").joinpath(
             CATALOG_RESOURCE
         )
@@ -130,10 +129,6 @@ class LecturaBot(commands.Bot):
 
         await self.add_cog(MaintenanceCog(self), guild=self.command_guild)
         await self.load_extension(FEATURES_EXTENSION)
-        self.add_view(QueueView(self.controller))
-        self.add_view(TextPickerView(self.controller))
-        self.add_view(QueuePanel(self.controller))
-        self.add_view(ReadingView(self.controller))
 
         if self.command_guild is not None:
             # Remove global aliases from older deployments in development mode.

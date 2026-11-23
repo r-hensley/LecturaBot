@@ -17,6 +17,11 @@ class ChannelMode(StrEnum):
     CUSTOM_ONLY = "custom_only"
 
 
+class QueueLayout(StrEnum):
+    SINGLE = "single"
+    DUAL = "dual"
+
+
 class Language(StrEnum):
     SPANISH = "es"
     ENGLISH = "en"
@@ -168,6 +173,7 @@ class ActiveReading:
     message_id: int | None = None
     archived_correction_groups: list[CorrectionGroup] = field(default_factory=list)
     current_correction_groups: list[CorrectionGroup] = field(default_factory=list)
+    preceding_message_ids: tuple[int, ...] = ()
 
     @property
     def correction_groups(self) -> list[CorrectionGroup]:
@@ -289,6 +295,7 @@ class ActiveReading:
             "custom_language_label": self.custom_language_label,
             "source_text_id": self.source_text_id,
             "message_id": self.message_id,
+            "preceding_message_ids": list(self.preceding_message_ids),
             "archived_correction_groups": [
                 group.to_dict() for group in self.archived_correction_groups
             ],
@@ -333,6 +340,7 @@ class ActiveReading:
             custom_language_label=data.get("custom_language_label"),
             source_text_id=data.get("source_text_id"),
             message_id=data.get("message_id"),
+            preceding_message_ids=tuple(data.get("preceding_message_ids", [])),
             archived_correction_groups=archived_correction_groups,
             current_correction_groups=current_correction_groups,
         )
@@ -364,6 +372,7 @@ class SessionState:
     queue_message_id: int | None = None
     picker_message_id: int | None = None
     revision: int = 0
+    turn_number: int = 0
 
     @property
     def current_user_id(self) -> int | None:
@@ -430,6 +439,7 @@ class SessionState:
             "queue_message_id": self.queue_message_id,
             "picker_message_id": self.picker_message_id,
             "revision": self.revision,
+            "turn_number": self.turn_number,
         }
 
     @classmethod
@@ -477,6 +487,7 @@ class SessionState:
             queue_message_id=data.get("queue_message_id"),
             picker_message_id=data.get("picker_message_id"),
             revision=int(data.get("revision", 0)),
+            turn_number=int(data.get("turn_number", 0)),
         )
         state.validate()
         return state

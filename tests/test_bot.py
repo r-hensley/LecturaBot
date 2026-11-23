@@ -1,16 +1,21 @@
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from stat import S_IMODE
+import sys
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
 
+import lecturabot
+from lecturabot import hotfix
 from lecturabot.bot import FEATURES_EXTENSION, LecturaBot, MaintenanceCog
 from lecturabot.bot_control import BotControl, send_request
 from lecturabot.features import LecturaCog, SettingsView
 from lecturabot.config import BotConfig
+from lecturabot.models import QueueLayout, SessionState
 from lecturabot.repository import SQLiteRepository
 
 
@@ -168,11 +173,59 @@ async def test_private_socket_reloads_features_and_keeps_session_state(
         assert bot.controller.handle_queue_action is original_queue_action
 
 
+async def test_socket_reloads_changed_reading_modules_and_recovers_from_bad_code(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Restore the imports when the test ends so other tests can keep using
+    # the classes they imported during collection.
+    for name in hotfix.RUNTIME_MODULES:
+        qualified = f"lecturabot.{name}"
+        monkeypatch.setitem(sys.modules, qualified, sys.modules[qualified])
+        monkeypatch.setattr(lecturabot, name, getattr(lecturabot, name))
+    replacement_dir = tmp_path / "sources"
+    replacement_dir.mkdir()
+    for name in hotfix.RUNTIME_MODULES:
+        source = Path(hotfix.__file__).with_name(f"{name}.py")
+        (replacement_dir / source.name).write_bytes(source.read_bytes())
+    monkeypatch.setattr(hotfix, "Path", lambda _: replacement_dir / "hotfix.py")
+    path = tmp_path / "control" / "bot.sock"
+    monkeypatch.setenv("LECTURABOT_CONTROL_SOCKET", str(path))
+    bot = LecturaBot(BotConfig(
+        token="test-token", guild_id=1, bot_status_contact_user_id=900,
+        issue_contact_user_id=901, database_path=tmp_path / "test.sqlite3", channel_pairs=(),
+    ))
+    monkeypatch.setattr(bot, "sync_app_commands", AsyncMock(return_value=0))
+    async with bot:
+        await bot.setup_hook()
+        controller, service = bot.controller, bot.service
+        old_class, old_cog = type(controller), bot.get_cog("LecturaCog")
+        session = SessionState(1, 1, 101, 201)
+        service._states[101] = session
+        timer = controller._reconnects[(201, 10)] = asyncio.Event()
+        renderer = replacement_dir / "rendering.py"
+        good_source = renderer.read_bytes()
+        renderer.write_bytes(good_source + b"\ninvalid syntax !!!\n")
+
+        failed = await send_request(path, "reload", ["features"])
+        assert not failed["ok"]
+        assert type(controller) is old_class and service._states[101] is session
+        assert type(bot.get_cog("LecturaCog")) is type(old_cog)
+
+        renderer.write_bytes(good_source + b"\nRELOADED_IN_TEST = True\n")
+        result = await send_request(path, "reload", ["features"])
+        assert result == {"ok": True, "completed": ["features"]}
+        assert sys.modules["lecturabot.rendering"].RELOADED_IN_TEST is True
+        assert bot.controller is controller and type(controller) is not old_class
+        assert bot.service is service and service._states[101].to_dict() == session.to_dict()
+        assert controller._reconnects[(201, 10)] is timer
+
+
 @pytest.mark.asyncio
 async def test_grace_period_setting_persists(tmp_path: Path) -> None:
     repository = SQLiteRepository(tmp_path / "settings.sqlite3")
     await repository.initialize()
     assert await repository.get_grace_minutes() == 5
+    assert await repository.get_queue_layout() is QueueLayout.DUAL
     await repository.set_grace_minutes(12)
     assert await SQLiteRepository(repository.database_path).get_grace_minutes() == 12
 
@@ -185,6 +238,7 @@ async def test_settings_panel_rejects_another_user_before_writing(tmp_path: Path
         config=SimpleNamespace(guild_id=1),
         service=SimpleNamespace(repository=repository),
         voice_grace_seconds=300,
+        queue_layout=QueueLayout.DUAL,
     )
     view = SettingsView(controller, user_id=10)  # type: ignore[arg-type]
     interaction = SimpleNamespace(
@@ -202,3 +256,26 @@ async def test_settings_panel_rejects_another_user_before_writing(tmp_path: Path
     assert await repository.get_grace_minutes() == 7
     assert controller.voice_grace_seconds == 420
     interaction.response.edit_message.assert_awaited_once()
+
+
+async def test_settings_select_switches_layout_and_updates_the_menu() -> None:
+    controller = SimpleNamespace(queue_layout=QueueLayout.DUAL, voice_grace_seconds=300)
+
+    async def set_layout(layout: QueueLayout) -> list[str]:
+        controller.queue_layout = layout
+        return []
+
+    controller.set_queue_layout = AsyncMock(side_effect=set_layout)
+    view = SettingsView(controller, user_id=10)  # type: ignore[arg-type]
+    view.authorized = AsyncMock(return_value=True)  # type: ignore[method-assign]
+    interaction = SimpleNamespace(
+        response=SimpleNamespace(defer=AsyncMock()), edit_original_response=AsyncMock(),
+    )
+    assert [option.value for option in view.layout.options if option.default] == ["dual"]
+    view.layout._values = ["single"]
+
+    await view.layout.callback(interaction)
+
+    controller.set_queue_layout.assert_awaited_once_with(QueueLayout.SINGLE)
+    assert [option.value for option in view.layout.options if option.default] == ["single"]
+    assert interaction.edit_original_response.await_args.kwargs["embed"].fields[-1].value == "Single embed"

@@ -119,22 +119,22 @@ The bot initializes its SQLite database, loads the bundled reading catalog,
 restores active sessions, registers persistent Discord controls, and
 synchronizes its application commands during startup.
 
-### Update reading commands without restarting
+### Reload reading code without restarting
 
 After the first startup with live reload support, update the source files on
 the bot host. The Discord bot owner can then run these slash commands:
 
-- `/reload` loads the updated `lecturabot.features` extension, which
-  contains the slash command handlers, settings panel, Help support links,
-  and gateway listeners.
+- `/reload` uses Discord's extension reload for `lecturabot.features`.
+  It also picks up changes to the controller, session service, repository,
+  rendering, correction handling, models, and views.
 - `/sync` publishes slash command additions, removals, or definition
-  changes. It uses the configured development guild or global scope. Handler
-  and panel changes alone only need `reload`. Reopen `/settings` to get the
-  updated panel.
+  changes. It uses the configured development guild or global scope. Reopen
+  `/settings` to get the updated panel after a reload.
 
-Reload keeps active reading sessions and voice timers in memory. Changes to
-the controller, service, persistent queue views, dependencies, or startup
-configuration still require a restart.
+Reload keeps the Discord connection, active sessions, and voice reconnect
+timers in memory. Changes to the bot's startup, hotfix loader, socket, configuration,
+dependencies, database schema, or the values of existing session enums require
+a service restart.
 
 ### Reload features from the bot host
 
@@ -144,27 +144,27 @@ override for `lecturabot.service`:
 
 ```ini
 [Service]
-RuntimeDirectory=lecturabot-control
-RuntimeDirectoryMode=0700
-Environment=LECTURABOT_CONTROL_SOCKET=/run/lecturabot-control/control.sock
+Environment=LECTURABOT_CONTROL_SOCKET=/home/ubuntu/LecturaBot/.control/control.sock
 KillSignal=SIGINT
 ```
 
-After installing the updated code and restarting the service once, run from
-the deployed checkout as the bot's OS user:
+Restart the service once when enabling the socket for the first time. If it is
+already listening, install the updated code and run from the deployed checkout
+as the bot's OS user:
 
 ```bash
 .venv/bin/python src/lecturabot/bot_control.py \
-  --socket /run/lecturabot-control/control.sock status
+  --socket .control/control.sock status
 .venv/bin/python src/lecturabot/bot_control.py \
-  --socket /run/lecturabot-control/control.sock reload features
+  --socket .control/control.sock reload features
 ```
 
 Check `status` first. Reload the code already present on the host and check
 the JSON reply before continuing. A failed or timed-out reload calls for
-checking the service log before retrying. The socket uses a private directory
-and mode `0600`. For a manual socket path outside the systemd runtime
-directory, remove a stale socket only after confirming the bot has stopped.
+checking the service log before retrying. LecturaBot creates `.control` with
+mode `0700` and the socket with mode `0600`. A graceful stop removes the socket.
+After a forced stop, remove a stale socket only after confirming the bot has
+stopped.
 
 ## Reading catalog
 
@@ -249,6 +249,10 @@ sources/
   grace period. The dropdown offers common durations; **Other…** opens a modal
   for a custom value from 0–60 minutes. Changes
   take effect for new disconnects and persist across bot restarts.
+- The same menu sets the queue layout for all Lectura rooms. **Two embeds**
+  is the default and uses a persistent queue plus a temporary text picker.
+  **Single embed** combines both in one message. The choice persists across
+  restarts and updates existing rooms during their current turn.
 
 - Active queue panels and reading controls are persisted across restarts.
 - Disconnected readers have five minutes by default to return to the same voice channel.

@@ -236,9 +236,13 @@ class ReadingView(discord.ui.View):
         controller: LecturaController,
         *,
         allow_different_text: bool = True,
+        legacy_turn_controls: bool = False,
     ) -> None:
         super().__init__(timeout=None)
         self.controller = controller
+        if not legacy_turn_controls:
+            self.remove_item(self.pass_reading)
+            self.remove_item(self.skip_afk_reading)
         if not allow_different_text:
             for item in self.children:
                 if (
@@ -313,18 +317,23 @@ class CustomTextModal(discord.ui.Modal):
         language: Language | None,
         ask_language: bool,
         max_text_length: int,
+        turn: tuple[int, int] | None = None,
     ) -> None:
         super().__init__(
             title="Tu propio texto / Your own text",
             # Modal IDs are registered globally by discord.py. Including the
             # picker ID prevents same-language forms opened in two rooms from
             # replacing one another's callback state.
-            custom_id=f"custom_text_modal:{language or 'choose'}:{picker_message_id}",
+            custom_id=(
+                f"custom_text_modal:{language or 'choose'}:{picker_message_id}"
+                + (f":{turn[0]}:{turn[1]}" if turn is not None else "")
+            ),
         )
         self.controller = controller
         self.text_channel_id = text_channel_id
         self.picker_message_id = picker_message_id
         self.language = language
+        self.turn = turn
         self.language_input: discord.ui.TextInput | None = None
         self.language_select: discord.ui.Select | None = None
 
@@ -389,6 +398,7 @@ class CustomTextModal(discord.ui.Modal):
             language=language,
             body=self.body_input.value,
             custom_language_label=language_label,
+            turn=self.turn,
         )
 
 

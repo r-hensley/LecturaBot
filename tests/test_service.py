@@ -956,7 +956,7 @@ async def test_catalog_replacement_rejects_stale_nonreader_and_exhaustion(
 async def test_custom_text_cannot_be_replaced_from_catalog(
     tmp_path: Path,
 ) -> None:
-    service, _, _ = await _make_service(tmp_path)
+    service, repository, _ = await _make_service(tmp_path)
     await _join(service, 10)
     await service.start(text_channel_id=101, actor_id=10)
     await service.set_picker_message(
@@ -964,18 +964,35 @@ async def test_custom_text_cannot_be_replaced_from_catalog(
         reader_id=10,
         message_id=500,
     )
+    with pytest.raises(SessionError) as oversized:
+        await service.begin_custom_reading(
+            text_channel_id=101,
+            reader_id=10,
+            picker_message_id=500,
+            language=Language.ENGLISH,
+            body="x" * 4_001,
+        )
+    _assert_error(oversized, "custom_text_too_long")
     await service.begin_custom_reading(
         text_channel_id=101,
         reader_id=10,
         picker_message_id=500,
         language=Language.ENGLISH,
-        body="My own passage.",
+        body="x" * 4_000,
     )
     await service.set_reading_message(
         text_channel_id=101,
         reader_id=10,
         message_id=700,
+        preceding_message_ids=(698, 699),
     )
+
+    restarted = SessionService(repository)
+    await restarted.initialize()
+    restored = await restarted.find_by_reading_message(698)
+    assert restored is not None and restored.active_reading is not None
+    assert restored.active_reading.preceding_message_ids == (698, 699)
+    assert restored.active_reading.message_id == 700
 
     with pytest.raises(SessionError) as custom:
         await service.replace_catalog_reading(

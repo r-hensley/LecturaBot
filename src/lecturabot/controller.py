@@ -17,6 +17,7 @@ from .models import (
     CorrectionSource,
     Language,
     Level,
+    QueueLayout,
     SessionPhase,
     SessionState,
 )
@@ -25,10 +26,16 @@ from .rendering import (
     RenderError,
     build_corrections_embed,
     build_instructions_embed,
-    build_reading_content,
+    build_reading_messages,
 )
 from .queue_panel import QueuePanel
-from .service import SessionError, SessionService, Transition, parse_correction_lines
+from .service import (
+    MAX_CUSTOM_TEXT_LENGTH,
+    SessionError,
+    SessionService,
+    Transition,
+    parse_correction_lines,
+)
 from .views import (
     CorrectionModal,
     CustomTextModal,
@@ -46,7 +53,6 @@ LEVEL_BY_INDEX = {
     2: Level.ADVANCED,
 }
 VOICE_GRACE_SECONDS = 5 * 60
-MAX_CUSTOM_TEXT_LENGTH = 1_600
 CORRECTION_CONTINUATION_PLACEHOLDER = (
     "Preparando continuación de correcciones… / "
     "Preparing correction continuation…"
@@ -73,6 +79,7 @@ class LecturaController:
         self.bot = bot
         self.config = config
         self.voice_grace_seconds = VOICE_GRACE_SECONDS
+        self.queue_layout = QueueLayout.DUAL
         self.service = service
         self.queue_help: Callable[[discord.Interaction], Awaitable[None]] | None = None
         # Service locks protect state commits; these locks extend the critical
@@ -80,9 +87,27 @@ class LecturaController:
         # a race and overwrite a newer queue or correction message.
         self._reconnects: dict[tuple[int, int], asyncio.Event] = {}
         self._ui_locks: dict[int, asyncio.Lock] = {}
+        self._layout_lock = asyncio.Lock()
 
     def _ui_lock_for(self, text_channel_id: int) -> asyncio.Lock:
         return self._ui_locks.setdefault(text_channel_id, asyncio.Lock())
+
+    async def set_queue_layout(self, layout: QueueLayout) -> list[str]:
+        """Save the setting and update existing rooms without changing their turns."""
+        failed_rooms: list[str] = []
+        async with self._layout_lock:
+            await self.service.repository.set_queue_layout(layout)
+            self.queue_layout = layout
+            for pair in self.config.channel_pairs:
+                try:
+                    async with self._ui_lock_for(pair.text_channel_id):
+                        state = await self.service.get_session(pair.text_channel_id)
+                        if state is not None:
+                            await self._refresh_queue(state)
+                except Exception:
+                    failed_rooms.append(pair.name)
+                    LOGGER.exception("failed to update queue layout in %s", pair.name)
+        return failed_rooms
 
     async def show_queue(self, interaction: discord.Interaction) -> None:
         try:
@@ -194,8 +219,7 @@ class LecturaController:
                 )
                 await self._publish_reading(transition)
                 published = True
-                if transition.retired_picker_message_id != transition.state.queue_message_id:
-                    await self._retire_message(transition.state.text_channel_id, transition.retired_picker_message_id)
+                await self._remove_picker(transition.state, transition.retired_picker_message_id)
                 await self._refresh_queue(transition.state)
             await interaction.followup.send(transition.notice, ephemeral=True)
         except SessionError as error:
@@ -254,6 +278,7 @@ class LecturaController:
                     language=language,
                     ask_language=state.channel_mode is ChannelMode.CUSTOM_ONLY,
                     max_text_length=MAX_CUSTOM_TEXT_LENGTH,
+                    turn=(state.session_id, state.turn_number),
                 )
             )
         except SessionError as error:
@@ -302,6 +327,7 @@ class LecturaController:
         language: Language,
         body: str,
         custom_language_label: str | None,
+        turn: tuple[int, int] | None = None,
     ) -> None:
         published = False
         try:
@@ -311,6 +337,16 @@ class LecturaController:
             self._require_matching_voice(member, pair)
             await interaction.response.defer(ephemeral=True, thinking=True)
             async with self._ui_lock_for(text_channel_id):
+                if turn is not None:
+                    state = await self.service.get_session(text_channel_id)
+                    if (
+                        state is None or state.phase is not SessionPhase.SELECTING
+                        or (state.session_id, state.turn_number) != turn
+                        or state.picker_message_id is None
+                    ):
+                        raise self._stale_turn()
+                    # The picker message can move while a reader has a form open.
+                    picker_message_id = state.picker_message_id
                 transition = await self.service.begin_custom_reading(
                     text_channel_id=text_channel_id,
                     reader_id=member.id,
@@ -321,8 +357,7 @@ class LecturaController:
                 )
                 await self._publish_reading(transition)
                 published = True
-                if picker_message_id != transition.state.queue_message_id:
-                    await self._retire_message(text_channel_id, picker_message_id)
+                await self._remove_picker(transition.state, picker_message_id)
                 await self._refresh_queue(transition.state)
             await interaction.followup.send(transition.notice, ephemeral=True)
         except SessionError as error:
@@ -417,31 +452,41 @@ class LecturaController:
     async def handle_pass(
         self, interaction: discord.Interaction, *, panel_phase: SessionPhase | None = None
     ) -> None:
-        try:
-            pair, member = self._interaction_context(interaction)
-            self._require_matching_voice(member, pair)
-            if interaction.message is None:
-                raise self._stale_turn()
-            await interaction.response.defer()
-            async with self._ui_lock_for(pair.text_channel_id):
-                await self._require_panel_phase(pair.text_channel_id, panel_phase)
-                transition = await self.service.pass_turn(
-                    text_channel_id=pair.text_channel_id,
-                    actor_id=member.id,
-                    source_message_id=interaction.message.id,
-                )
-                await self._apply_transition(transition)
-            await interaction.followup.send(transition.notice, ephemeral=True)
-        except SessionError as error:
-            await self._send_error(interaction, error.user_message)
-        except Exception:
-            LOGGER.exception("pass-turn action failed")
-            await self._send_error(interaction, self._generic_error())
+        await self._handle_turn_action(interaction, vote=False, phase=panel_phase)
 
     async def handle_skip_vote(
         self, interaction: discord.Interaction, *, panel_phase: SessionPhase | None = None
     ) -> None:
-        """Record a fixed-threshold AFK-skip vote from a queued listener."""
+        await self._handle_turn_action(interaction, vote=True, phase=panel_phase)
+
+    async def handle_skip_turn(
+        self,
+        interaction: discord.Interaction,
+        *,
+        session_id: int,
+        turn_number: int,
+        phase: SessionPhase,
+    ) -> None:
+        await self._handle_turn_action(
+            interaction, vote=False, phase=phase, turn=(session_id, turn_number),
+        )
+
+    async def _require_panel_phase(
+        self, channel_id: int, phase: SessionPhase,
+    ) -> SessionState:
+        state = await self.service.get_session(channel_id)
+        if state is None or state.phase is not phase:
+            raise self._stale_turn()
+        return state
+
+    async def _handle_turn_action(
+        self,
+        interaction: discord.Interaction,
+        *,
+        vote: bool,
+        phase: SessionPhase | None,
+        turn: tuple[int, int] | None = None,
+    ) -> None:
         try:
             pair, member = self._interaction_context(interaction)
             self._require_matching_voice(member, pair)
@@ -449,12 +494,27 @@ class LecturaController:
                 raise self._stale_turn()
             await interaction.response.defer()
             async with self._ui_lock_for(pair.text_channel_id):
-                await self._require_panel_phase(pair.text_channel_id, panel_phase)
-                transition = await self.service.vote_to_skip(
-                    text_channel_id=pair.text_channel_id,
-                    voter_id=member.id,
-                    source_message_id=interaction.message.id,
-                )
+                if phase is not None:
+                    state = await self._require_panel_phase(pair.text_channel_id, phase)
+                    if turn is not None:
+                        if (
+                            turn != (state.session_id, state.turn_number)
+                            or interaction.message.id != state.queue_message_id
+                        ):
+                            raise self._stale_turn()
+                        vote = member.id != state.current_user_id
+                if vote:
+                    transition = await self.service.vote_to_skip(
+                        text_channel_id=pair.text_channel_id,
+                        voter_id=member.id,
+                        source_message_id=interaction.message.id,
+                    )
+                else:
+                    transition = await self.service.pass_turn(
+                        text_channel_id=pair.text_channel_id,
+                        actor_id=member.id,
+                        source_message_id=interaction.message.id,
+                    )
                 if transition.advanced:
                     await self._apply_transition(transition)
                 else:
@@ -463,16 +523,8 @@ class LecturaController:
         except SessionError as error:
             await self._send_error(interaction, error.user_message)
         except Exception:
-            LOGGER.exception("skip-AFK vote failed")
+            LOGGER.exception("skip-turn action failed")
             await self._send_error(interaction, self._generic_error())
-
-    async def _require_panel_phase(
-        self, channel_id: int, phase: SessionPhase | None
-    ) -> None:
-        if phase is not None:
-            state = await self.service.get_session(channel_id)
-            if state is None or state.phase is not phase:
-                raise self._stale_turn()
 
     async def handle_reply(self, message: discord.Message) -> None:
         if message.author.bot or message.reference is None:
@@ -497,7 +549,11 @@ class LecturaController:
         if state is None or state.text_channel_id != message.channel.id:
             return
         reading = state.active_reading
-        if reading is None or reading.reader_id == message.author.id:
+        if (
+            reading is None
+            or reading.message_id is None
+            or reading.reader_id == message.author.id
+        ):
             return
         try:
             content = message.content
@@ -531,7 +587,7 @@ class LecturaController:
             async with self._ui_lock_for(state.text_channel_id):
                 await self._add_corrections_with_rollover(
                     text_channel_id=state.text_channel_id,
-                    reading_message_id=referenced_id,
+                    reading_message_id=reading.message_id,
                     corrector_id=message.author.id,
                     corrector_display_name=message.author.display_name,
                     items=items,
@@ -623,7 +679,7 @@ class LecturaController:
         if reading is None or reading.message_id != continuation.id:
             raise RuntimeError("correction rollover did not activate its message")
         try:
-            await self._edit_reading_message(continuation, reading)
+            await self._edit_reading_message(channel, continuation, reading)
         except Exception:
             LOGGER.warning(
                 "initial activation of correction continuation %s failed; "
@@ -805,7 +861,8 @@ class LecturaController:
                             )
                             needs_picker = True
                     panel = await self._refresh_queue(
-                        state, repost=needs_picker, notify_reader=needs_picker
+                        state, repost=needs_picker and self.queue_layout is QueueLayout.SINGLE,
+                        notify_reader=needs_picker,
                     )
                     if pair.text_channel_id in restart_notice_rooms:
                         await panel.channel.send(
@@ -830,48 +887,64 @@ class LecturaController:
                 "No se pudo preparar el texto. / The reading could not be prepared.",
             )
         channel = await self._text_channel(transition.state.text_channel_id)
-        content = build_reading_content(reading)
+        contents = build_reading_messages(reading)
         embed = build_corrections_embed(reading)
-        message = await channel.send(
-            content=content,
-            embed=embed,
-            view=ReadingView(
-                self,
-                allow_different_text=reading.source_text_id is not None,
-            ),
-            allowed_mentions=discord.AllowedMentions.none(),
-        )
+        preceding: list[discord.Message] = []
+        message = None
         try:
+            for content in contents[:-1]:
+                preceding.append(await channel.send(
+                    content=content,
+                    allowed_mentions=discord.AllowedMentions.none(),
+                ))
+            message = await channel.send(
+                content=contents[-1],
+                embed=embed,
+                view=ReadingView(
+                    self,
+                    allow_different_text=reading.source_text_id is not None,
+                ),
+                allowed_mentions=discord.AllowedMentions.none(),
+            )
             await self.service.set_reading_message(
                 text_channel_id=transition.state.text_channel_id,
                 reader_id=reading.reader_id,
                 message_id=message.id,
+                preceding_message_ids=tuple(part.id for part in preceding),
             )
         except Exception:
-            # The reading is visible but not authoritative. Remove its controls
-            # so it cannot masquerade as a live turn while rollback restores
-            # the picker.
-            try:
-                await message.edit(view=None)
-            except discord.HTTPException:
-                LOGGER.exception(
-                    "failed to retire unpublished reading message %s",
-                    message.id,
-                )
+            if len(contents) > 1:
+                if message is not None:
+                    preceding.append(message)
+                for part in reversed(preceding):
+                    try:
+                        await part.delete()
+                    except discord.NotFound:
+                        pass
+                    except discord.HTTPException:
+                        LOGGER.exception(
+                            "failed to remove unpublished passage part %s", part.id,
+                        )
+            elif message is not None:
+                # Preserve the single-message failure behavior while rollback
+                # restores the picker.
+                try:
+                    await message.edit(view=None)
+                except discord.HTTPException:
+                    LOGGER.exception("failed to retire unpublished reading message %s", message.id)
             raise
 
     async def _apply_transition(self, transition: Transition) -> None:
         state = transition.state
         try:
-            if transition.retired_picker_message_id != state.queue_message_id:
-                await self._retire_message(state.text_channel_id, transition.retired_picker_message_id)
+            await self._remove_picker(state, transition.retired_picker_message_id)
             await self._retire_message(
                 state.text_channel_id,
                 transition.retired_reading_message_id,
             )
             await self._refresh_queue(
                 state,
-                repost=transition.repost_queue,
+                repost=transition.repost_queue and self.queue_layout is QueueLayout.SINGLE,
                 notify_reader=transition.activated_reader_id is not None,
             )
         except Exception:
@@ -891,6 +964,7 @@ class LecturaController:
         notify_reader: bool = False,
     ) -> discord.Message:
         """Create, edit, or deliberately repost a room's queue panel."""
+        includes_picker = self.queue_layout is QueueLayout.SINGLE
         channel = await self._text_channel(state.text_channel_id)
         message: discord.Message | None = None
         previous_message_id = state.queue_message_id
@@ -904,28 +978,29 @@ class LecturaController:
                 if not message.flags.components_v2:
                     message = None
         if message is None:
-            reader = state.current_user_id if notify_reader else None
             message = await channel.send(
-                view=QueuePanel(self, state),
-                allowed_mentions=discord.AllowedMentions(
-                    everyone=False, roles=False,
-                    users=[discord.Object(id=reader)] if reader is not None else False,
-                    replied_user=False,
+                view=QueuePanel(self, state, includes_picker=includes_picker),
+                allowed_mentions=self._picker_mentions(
+                    state, notify_reader=notify_reader and includes_picker,
                 ),
             )
-            await self._persist_queue_message(state, message)
-            if previous_message_id is not None and previous_message_id != message.id:
-                await self._retire_message(
-                    state.text_channel_id,
-                    previous_message_id,
-                )
-            return message
-        await message.edit(
-            view=QueuePanel(self, state),
-            allowed_mentions=discord.AllowedMentions.none(),
-        )
-        if state.phase is SessionPhase.SELECTING and state.picker_message_id != message.id:
-            await self._persist_queue_message(state, message)
+            await self._persist_queue_message(state, message, includes_picker=includes_picker)
+            if not includes_picker:
+                await self._ensure_separate_picker(channel, state, message.id, notify_reader)
+        else:
+            # Publish a replacement picker before taking controls off a combined panel.
+            if not includes_picker:
+                await self._ensure_separate_picker(channel, state, message.id, notify_reader)
+            await message.edit(
+                view=QueuePanel(self, state, includes_picker=includes_picker),
+                allowed_mentions=discord.AllowedMentions.none(),
+            )
+            if (
+                includes_picker and state.phase is SessionPhase.SELECTING
+                and state.picker_message_id != message.id
+            ):
+                await self.service.set_queue_message(state.text_channel_id, message.id)
+                await self._remove_picker(state, state.picker_message_id)
         return message
 
     async def _publish_queue_interaction(
@@ -934,25 +1009,29 @@ class LecturaController:
         state: SessionState,
     ) -> discord.InteractionMessage:
         """Use the command's public response as a fresh queue panel."""
-        previous_message_id = state.queue_message_id
+        includes_picker = self.queue_layout is QueueLayout.SINGLE
         message = await interaction.edit_original_response(
-            view=QueuePanel(self, state),
+            view=QueuePanel(self, state, includes_picker=includes_picker),
             allowed_mentions=discord.AllowedMentions.none(),
         )
-        await self._persist_queue_message(state, message)
-        if previous_message_id is not None and previous_message_id != message.id:
-            await self._retire_message(state.text_channel_id, previous_message_id)
+        await self._persist_queue_message(state, message, includes_picker=includes_picker)
+        if not includes_picker and state.phase is SessionPhase.SELECTING:
+            channel = await self._text_channel(state.text_channel_id)
+            await self._ensure_separate_picker(channel, state, message.id, False)
         return message
 
     async def _persist_queue_message(
         self,
         state: SessionState,
         message: discord.Message,
+        *,
+        includes_picker: bool,
     ) -> None:
         try:
             await self.service.set_queue_message(
                 state.text_channel_id,
                 message.id,
+                includes_picker=includes_picker,
             )
         except Exception:
             try:
@@ -964,10 +1043,69 @@ class LecturaController:
                 )
             raise
         if (
-            state.phase is SessionPhase.SELECTING
+            includes_picker and state.phase is SessionPhase.SELECTING
             and state.picker_message_id not in (None, state.queue_message_id, message.id)
         ):
-            await self._retire_message(state.text_channel_id, state.picker_message_id)
+            await self._remove_picker(state, state.picker_message_id)
+        if state.queue_message_id is not None and state.queue_message_id != message.id:
+            await self._retire_message(state.text_channel_id, state.queue_message_id)
+
+    async def _ensure_separate_picker(
+        self,
+        channel: discord.TextChannel,
+        state: SessionState,
+        queue_message_id: int,
+        notify_reader: bool,
+    ) -> None:
+        reader = state.current_user_id
+        if state.phase is not SessionPhase.SELECTING or reader is None:
+            return
+        previous_picker_id = state.picker_message_id
+        if previous_picker_id in (state.queue_message_id, queue_message_id):
+            previous_picker_id = None
+        if previous_picker_id is not None:
+            try:
+                previous = await channel.fetch_message(previous_picker_id)
+            except discord.NotFound:
+                previous_picker_id = None
+            else:
+                if previous.flags.components_v2:
+                    return
+        message = await channel.send(
+            view=QueuePanel(self, state, picker_only=True),
+            allowed_mentions=self._picker_mentions(state, notify_reader=notify_reader),
+        )
+        try:
+            await self.service.set_picker_message(
+                text_channel_id=state.text_channel_id, reader_id=reader, message_id=message.id,
+            )
+        except Exception:
+            await self._delete_picker(channel, message.id)
+            raise
+        if previous_picker_id is not None:
+            await self._delete_picker(channel, previous_picker_id)
+
+    @staticmethod
+    def _picker_mentions(state: SessionState, *, notify_reader: bool) -> discord.AllowedMentions:
+        reader = state.current_user_id if notify_reader and state.phase is SessionPhase.SELECTING else None
+        return discord.AllowedMentions(
+            everyone=False, roles=False,
+            users=[discord.Object(id=reader)] if reader is not None else False,
+            replied_user=False,
+        )
+
+    async def _remove_picker(self, state: SessionState, message_id: int | None) -> None:
+        if message_id is not None and message_id != state.queue_message_id:
+            await self._delete_picker(await self._text_channel(state.text_channel_id), message_id)
+
+    @staticmethod
+    async def _delete_picker(channel: discord.TextChannel, message_id: int) -> None:
+        try:
+            await channel.get_partial_message(message_id).delete()
+        except discord.NotFound:
+            pass
+        except discord.HTTPException:
+            LOGGER.exception("failed to remove temporary picker %s", message_id)
 
     async def _refresh_reading(self, state: SessionState) -> bool:
         reading = state.active_reading
@@ -976,19 +1114,29 @@ class LecturaController:
         channel = await self._text_channel(state.text_channel_id)
         try:
             message = await channel.fetch_message(reading.message_id)
+            await self._edit_reading_message(channel, message, reading)
         except discord.NotFound:
             LOGGER.warning("active reading message %s no longer exists", reading.message_id)
             return False
-        await self._edit_reading_message(message, reading)
         return True
 
     async def _edit_reading_message(
         self,
+        channel: discord.TextChannel,
         message: discord.Message,
         reading: ActiveReading,
     ) -> None:
+        *preceding, content = build_reading_messages(reading)
+        for message_id, part_content in zip(
+            reading.preceding_message_ids, preceding, strict=True,
+        ):
+            part = await channel.fetch_message(message_id)
+            if part.content != part_content:
+                await part.edit(
+                    content=part_content, allowed_mentions=discord.AllowedMentions.none(),
+                )
         await message.edit(
-            content=build_reading_content(reading),
+            content=content,
             embed=build_corrections_embed(reading),
             view=ReadingView(
                 self,
@@ -1008,7 +1156,7 @@ class LecturaController:
         channel = await self._text_channel(text_channel_id)
         message = await channel.fetch_message(reading.message_id)
         await message.edit(
-            content=build_reading_content(reading),
+            content=build_reading_messages(reading)[-1],
             embed=build_corrections_embed(reading),
             view=None,
             allowed_mentions=discord.AllowedMentions.none(),
@@ -1124,7 +1272,7 @@ class LecturaController:
     @staticmethod
     def _validate_reading_render(reading: ActiveReading) -> None:
         """Raise before persistence if a correction would exceed Discord limits."""
-        build_reading_content(reading)
+        build_reading_messages(reading)
         build_corrections_embed(reading)
 
     @staticmethod

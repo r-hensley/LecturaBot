@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from bisect import bisect_right
 
 import discord
 
@@ -189,10 +190,7 @@ def _reading_heading(reading: ActiveReading) -> str:
     return f"{reader} - Reading - English - Level {levels[reading.level]}"
 
 
-def _compose_reading_content(
-    reading: ActiveReading,
-    matches: list[str],
-) -> str:
+def _reading_prefix(reading: ActiveReading) -> str:
     lines = [f"## {_reading_heading(reading)}"]
     if reading.expected_emotion:
         emotion_label = (
@@ -203,27 +201,31 @@ def _compose_reading_content(
         lines.append(
             f"{emotion_label}: {_escape_user_text(reading.expected_emotion)}"
         )
-    lines.extend(
-        [
-            highlight_body(reading.body, matches),
-            "** **",
-        ]
-    )
-    return "\n".join(lines)
+    return "\n".join(lines) + "\n"
 
 
-def build_reading_content(reading: ActiveReading) -> str:
-    """Render a safe reading post without letting markup reject corrections."""
-    base_content = _compose_reading_content(reading, [])
-    if len(base_content) > MAX_MESSAGE_CONTENT:
+def _message_length(content: str) -> int:
+    return len(content.encode("utf-16-le")) // 2
+
+
+_READING_SUFFIX = "\n** **"
+
+
+def _render_reading_part(body: str, prefix: str, matches: list[str]) -> str:
+    def compose(highlights: list[str]) -> str:
+        return prefix + highlight_body(body, highlights) + _READING_SUFFIX
+
+    base_content = compose([])
+    if _message_length(base_content) > MAX_MESSAGE_CONTENT:
         raise RenderError(
-            f"reading content is {len(base_content)} characters; "
+            f"reading content is {_message_length(base_content)} characters; "
             f"Discord allows {MAX_MESSAGE_CONTENT}"
         )
 
-    current_matches = reading.current_correction_texts
-    content = _compose_reading_content(reading, current_matches)
-    if len(content) <= MAX_MESSAGE_CONTENT:
+    if not matches:
+        return base_content
+    content = compose(matches)
+    if _message_length(content) <= MAX_MESSAGE_CONTENT:
         return content
 
     # Highlight markup adds eight characters per occurrence and can exceed
@@ -232,20 +234,62 @@ def build_reading_content(reading: ActiveReading) -> str:
     # highlights as can be rendered safely instead of imposing another cap.
     included_matches: list[str] = []
     content = base_content
-    for match in current_matches:
-        candidate = _compose_reading_content(
-            reading,
-            [*included_matches, match],
-        )
-        if len(candidate) <= MAX_MESSAGE_CONTENT:
+    for match in matches:
+        candidate = compose([*included_matches, match])
+        if _message_length(candidate) <= MAX_MESSAGE_CONTENT:
             included_matches.append(match)
             content = candidate
-    if len(content) > MAX_MESSAGE_CONTENT:  # Defensive: base was checked above.
-        raise RenderError(
-            f"reading content is {len(content)} characters; "
-            f"Discord allows {MAX_MESSAGE_CONTENT}"
-        )
     return content
+
+
+def build_reading_content(reading: ActiveReading) -> str:
+    """Render a reading that fits in a single Discord message."""
+    return _render_reading_part(
+        reading.body, _reading_prefix(reading), reading.current_correction_texts,
+    )
+
+
+def build_reading_messages(reading: ActiveReading) -> list[str]:
+    """Split custom passages before adding highlights so their parts stay fixed."""
+    if reading.level is not None or reading.source_text_id is not None:
+        return [build_reading_content(reading)]
+
+    prefix = _reading_prefix(reading)
+    body = reading.body
+    matches = reading.current_correction_texts
+    messages: list[str] = []
+    while True:
+        budget = MAX_MESSAGE_CONTENT - _message_length(prefix + _READING_SUFFIX)
+        if _message_length(_escape_user_text(body)) <= budget:
+            return [*messages, _render_reading_part(body, prefix, matches)]
+
+        end = bisect_right(
+            range(min(len(body), budget) + 1),
+            budget,
+            key=lambda index: _message_length(_escape_user_text(body[:index])),
+        ) - 1
+        if end <= 0:
+            raise RenderError("reading heading leaves no space for the passage")
+
+        # Prefer a nearby paragraph or word boundary. Retain every character,
+        # and hard-split long runs with no whitespace within reach.
+        window_start = max(0, end - 200)
+        paragraph_end = body.rfind("\n\n", window_start, end)
+        boundary = end
+        if paragraph_end >= 0:
+            boundary = paragraph_end + 2
+        elif not body[end].isspace():
+            boundaries = list(re.finditer(r"\s+", body[window_start:end]))
+            if boundaries:
+                boundary = window_start + boundaries[-1].end()
+        if (
+            boundary != end
+            and _message_length(_escape_user_text(body[:boundary])) <= budget
+        ):
+            end = boundary
+        messages.append(_render_reading_part(body[:end], prefix, matches))
+        body = body[end:]
+        prefix = ""
 
 
 def build_corrections_embed(reading: ActiveReading) -> discord.Embed:
