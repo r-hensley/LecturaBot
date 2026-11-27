@@ -3,11 +3,11 @@
   "inputs": {
     "spreadsheet_snapshot": {
       "path": "sources/expanded_spreadsheet_readings.json",
-      "sha256": "06bf750671677969947b6a17df0c6652cce1c611b176da829eeab90137d72ff7"
+      "sha256": "b5e9dd3b5b6629af5f788e67432d2171af148e6b4217b834bdfbaffe7ba0fae6"
     },
     "legacy_snapshot": {
       "path": "sources/legacy_catalog_2026-07-11.json",
-      "sha256": "3c46319f23f356582b6b3fc55aea233615b9bbea37960c2e23a61d27228d78ec"
+      "sha256": "8acc0ce220f9c1b6645605bb1cba15166d4997d228d4ceaba52b09434fae7017"
     },
     "retired_snapshot": {
       "path": "sources/legacy_retired_readings_2026-07-20.json",
