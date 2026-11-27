@@ -7,7 +7,7 @@
     },
     "legacy_snapshot": {
       "path": "sources/legacy_catalog_2026-07-11.json",
-      "sha256": "d415285de53393c19f9ea4984e727d401e5f6b4110d12c7b235ac2c7b354d9eb"
+      "sha256": "3c46319f23f356582b6b3fc55aea233615b9bbea37960c2e23a61d27228d78ec"
     },
     "retired_snapshot": {
       "path": "sources/legacy_retired_readings_2026-07-20.json",

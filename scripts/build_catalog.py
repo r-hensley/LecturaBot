@@ -152,7 +152,6 @@ EDITORIAL_REPLACEMENTS: Final = {
     "ENGLISH INTERMEDIATE!A266": ("heavy load place upon you", "heavy load placed upon you"),
     "ENGLISH INTERMEDIATE!A299": ("sound cliche", "sound cliché"),
     "ENGLISH INTERMEDIATE!A314": ("Ni-san and I made", "John and I made"),
-    "google_doc_readings.txt:239": ("look for thWe continued", "look for them. We continued"),
     "google_doc_readings.txt:1690": ("Espero me llame.", "Espero que me llame."),
 }
 
